@@ -1,0 +1,21 @@
+# Build directories
+build/
+bin/
+lib/
+
+# IDE settings
+.vscode/
+.idea/
+.cursor/
+*.xcodeproj/
+*.xcworkspace/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Executables
+solver_app
+*.o
+*.a
+*.dylib
