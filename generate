@@ -1,0 +1,1316 @@
+{
+    "bundles": [
+        {
+            "area": 17,
+            "color": [
+                36,
+                139,
+                242
+            ],
+            "id": 0
+        },
+        {
+            "area": 22,
+            "color": [
+                242,
+                242,
+                36
+            ],
+            "id": 1
+        },
+        {
+            "area": 16,
+            "color": [
+                36,
+                36,
+                242
+            ],
+            "id": 2
+        },
+        {
+            "area": 21,
+            "color": [
+                139,
+                242,
+                36
+            ],
+            "id": 3
+        },
+        {
+            "area": 24,
+            "color": [
+                242,
+                36,
+                36
+            ],
+            "id": 4
+        }
+    ],
+    "cells": [
+        {
+            "bundle_id": 1,
+            "figure_id": 5,
+            "id": 0,
+            "neighbors": [
+                1,
+                10
+            ],
+            "x": 0,
+            "y": 0
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 7,
+            "id": 1,
+            "neighbors": [
+                2,
+                11,
+                0
+            ],
+            "x": 1,
+            "y": 0
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 7,
+            "id": 2,
+            "neighbors": [
+                3,
+                12,
+                1
+            ],
+            "x": 2,
+            "y": 0
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 9,
+            "id": 3,
+            "neighbors": [
+                4,
+                13,
+                2
+            ],
+            "x": 3,
+            "y": 0
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 9,
+            "id": 4,
+            "neighbors": [
+                5,
+                14,
+                3
+            ],
+            "x": 4,
+            "y": 0
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 9,
+            "id": 5,
+            "neighbors": [
+                6,
+                15,
+                4
+            ],
+            "x": 5,
+            "y": 0
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 18,
+            "id": 6,
+            "neighbors": [
+                7,
+                16,
+                5
+            ],
+            "x": 6,
+            "y": 0
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 18,
+            "id": 7,
+            "neighbors": [
+                8,
+                17,
+                6
+            ],
+            "x": 7,
+            "y": 0
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 18,
+            "id": 8,
+            "neighbors": [
+                9,
+                18,
+                7
+            ],
+            "x": 8,
+            "y": 0
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 18,
+            "id": 9,
+            "neighbors": [
+                19,
+                8
+            ],
+            "x": 9,
+            "y": 0
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 5,
+            "id": 10,
+            "neighbors": [
+                0,
+                11,
+                20
+            ],
+            "x": 0,
+            "y": 1
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 5,
+            "id": 11,
+            "neighbors": [
+                1,
+                12,
+                21,
+                10
+            ],
+            "x": 1,
+            "y": 1
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 7,
+            "id": 12,
+            "neighbors": [
+                2,
+                13,
+                22,
+                11
+            ],
+            "x": 2,
+            "y": 1
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 7,
+            "id": 13,
+            "neighbors": [
+                3,
+                14,
+                23,
+                12
+            ],
+            "x": 3,
+            "y": 1
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 19,
+            "id": 14,
+            "neighbors": [
+                4,
+                15,
+                24,
+                13
+            ],
+            "x": 4,
+            "y": 1
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 19,
+            "id": 15,
+            "neighbors": [
+                5,
+                16,
+                25,
+                14
+            ],
+            "x": 5,
+            "y": 1
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 14,
+            "id": 16,
+            "neighbors": [
+                6,
+                17,
+                26,
+                15
+            ],
+            "x": 6,
+            "y": 1
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 18,
+            "id": 17,
+            "neighbors": [
+                7,
+                18,
+                27,
+                16
+            ],
+            "x": 7,
+            "y": 1
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 18,
+            "id": 18,
+            "neighbors": [
+                8,
+                19,
+                28,
+                17
+            ],
+            "x": 8,
+            "y": 1
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 6,
+            "id": 19,
+            "neighbors": [
+                9,
+                29,
+                18
+            ],
+            "x": 9,
+            "y": 1
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 5,
+            "id": 20,
+            "neighbors": [
+                10,
+                21,
+                30
+            ],
+            "x": 0,
+            "y": 2
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 5,
+            "id": 21,
+            "neighbors": [
+                11,
+                22,
+                31,
+                20
+            ],
+            "x": 1,
+            "y": 2
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 2,
+            "id": 22,
+            "neighbors": [
+                12,
+                23,
+                32,
+                21
+            ],
+            "x": 2,
+            "y": 2
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 19,
+            "id": 23,
+            "neighbors": [
+                13,
+                24,
+                33,
+                22
+            ],
+            "x": 3,
+            "y": 2
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 19,
+            "id": 24,
+            "neighbors": [
+                14,
+                25,
+                34,
+                23
+            ],
+            "x": 4,
+            "y": 2
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 0,
+            "id": 25,
+            "neighbors": [
+                15,
+                26,
+                35,
+                24
+            ],
+            "x": 5,
+            "y": 2
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 14,
+            "id": 26,
+            "neighbors": [
+                16,
+                27,
+                36,
+                25
+            ],
+            "x": 6,
+            "y": 2
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 14,
+            "id": 27,
+            "neighbors": [
+                17,
+                28,
+                37,
+                26
+            ],
+            "x": 7,
+            "y": 2
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 14,
+            "id": 28,
+            "neighbors": [
+                18,
+                29,
+                38,
+                27
+            ],
+            "x": 8,
+            "y": 2
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 6,
+            "id": 29,
+            "neighbors": [
+                19,
+                39,
+                28
+            ],
+            "x": 9,
+            "y": 2
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 11,
+            "id": 30,
+            "neighbors": [
+                20,
+                31,
+                40
+            ],
+            "x": 0,
+            "y": 3
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 2,
+            "id": 31,
+            "neighbors": [
+                21,
+                32,
+                41,
+                30
+            ],
+            "x": 1,
+            "y": 3
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 2,
+            "id": 32,
+            "neighbors": [
+                22,
+                33,
+                42,
+                31
+            ],
+            "x": 2,
+            "y": 3
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 2,
+            "id": 33,
+            "neighbors": [
+                23,
+                34,
+                43,
+                32
+            ],
+            "x": 3,
+            "y": 3
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 20,
+            "id": 34,
+            "neighbors": [
+                24,
+                35,
+                44,
+                33
+            ],
+            "x": 4,
+            "y": 3
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 0,
+            "id": 35,
+            "neighbors": [
+                25,
+                36,
+                45,
+                34
+            ],
+            "x": 5,
+            "y": 3
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 0,
+            "id": 36,
+            "neighbors": [
+                26,
+                37,
+                46,
+                35
+            ],
+            "x": 6,
+            "y": 3
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 8,
+            "id": 37,
+            "neighbors": [
+                27,
+                38,
+                47,
+                36
+            ],
+            "x": 7,
+            "y": 3
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 6,
+            "id": 38,
+            "neighbors": [
+                28,
+                39,
+                48,
+                37
+            ],
+            "x": 8,
+            "y": 3
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 6,
+            "id": 39,
+            "neighbors": [
+                29,
+                49,
+                38
+            ],
+            "x": 9,
+            "y": 3
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 11,
+            "id": 40,
+            "neighbors": [
+                30,
+                41,
+                50
+            ],
+            "x": 0,
+            "y": 4
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 11,
+            "id": 41,
+            "neighbors": [
+                31,
+                42,
+                51,
+                40
+            ],
+            "x": 1,
+            "y": 4
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 12,
+            "id": 42,
+            "neighbors": [
+                32,
+                43,
+                52,
+                41
+            ],
+            "x": 2,
+            "y": 4
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 2,
+            "id": 43,
+            "neighbors": [
+                33,
+                44,
+                53,
+                42
+            ],
+            "x": 3,
+            "y": 4
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 20,
+            "id": 44,
+            "neighbors": [
+                34,
+                45,
+                54,
+                43
+            ],
+            "x": 4,
+            "y": 4
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 0,
+            "id": 45,
+            "neighbors": [
+                35,
+                46,
+                55,
+                44
+            ],
+            "x": 5,
+            "y": 4
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 17,
+            "id": 46,
+            "neighbors": [
+                36,
+                47,
+                56,
+                45
+            ],
+            "x": 6,
+            "y": 4
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 8,
+            "id": 47,
+            "neighbors": [
+                37,
+                48,
+                57,
+                46
+            ],
+            "x": 7,
+            "y": 4
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 6,
+            "id": 48,
+            "neighbors": [
+                38,
+                49,
+                58,
+                47
+            ],
+            "x": 8,
+            "y": 4
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 6,
+            "id": 49,
+            "neighbors": [
+                39,
+                59,
+                48
+            ],
+            "x": 9,
+            "y": 4
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 11,
+            "id": 50,
+            "neighbors": [
+                40,
+                51,
+                60
+            ],
+            "x": 0,
+            "y": 5
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 4,
+            "id": 51,
+            "neighbors": [
+                41,
+                52,
+                61,
+                50
+            ],
+            "x": 1,
+            "y": 5
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 12,
+            "id": 52,
+            "neighbors": [
+                42,
+                53,
+                62,
+                51
+            ],
+            "x": 2,
+            "y": 5
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 12,
+            "id": 53,
+            "neighbors": [
+                43,
+                54,
+                63,
+                52
+            ],
+            "x": 3,
+            "y": 5
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 20,
+            "id": 54,
+            "neighbors": [
+                44,
+                55,
+                64,
+                53
+            ],
+            "x": 4,
+            "y": 5
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 17,
+            "id": 55,
+            "neighbors": [
+                45,
+                56,
+                65,
+                54
+            ],
+            "x": 5,
+            "y": 5
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 17,
+            "id": 56,
+            "neighbors": [
+                46,
+                57,
+                66,
+                55
+            ],
+            "x": 6,
+            "y": 5
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 8,
+            "id": 57,
+            "neighbors": [
+                47,
+                58,
+                67,
+                56
+            ],
+            "x": 7,
+            "y": 5
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 8,
+            "id": 58,
+            "neighbors": [
+                48,
+                59,
+                68,
+                57
+            ],
+            "x": 8,
+            "y": 5
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 6,
+            "id": 59,
+            "neighbors": [
+                49,
+                69,
+                58
+            ],
+            "x": 9,
+            "y": 5
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 11,
+            "id": 60,
+            "neighbors": [
+                50,
+                61,
+                70
+            ],
+            "x": 0,
+            "y": 6
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 4,
+            "id": 61,
+            "neighbors": [
+                51,
+                62,
+                71,
+                60
+            ],
+            "x": 1,
+            "y": 6
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 4,
+            "id": 62,
+            "neighbors": [
+                52,
+                63,
+                72,
+                61
+            ],
+            "x": 2,
+            "y": 6
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 4,
+            "id": 63,
+            "neighbors": [
+                53,
+                64,
+                73,
+                62
+            ],
+            "x": 3,
+            "y": 6
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 15,
+            "id": 64,
+            "neighbors": [
+                54,
+                65,
+                74,
+                63
+            ],
+            "x": 4,
+            "y": 6
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 15,
+            "id": 65,
+            "neighbors": [
+                55,
+                66,
+                75,
+                64
+            ],
+            "x": 5,
+            "y": 6
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 15,
+            "id": 66,
+            "neighbors": [
+                56,
+                67,
+                76,
+                65
+            ],
+            "x": 6,
+            "y": 6
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 8,
+            "id": 67,
+            "neighbors": [
+                57,
+                68,
+                77,
+                66
+            ],
+            "x": 7,
+            "y": 6
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 8,
+            "id": 68,
+            "neighbors": [
+                58,
+                69,
+                78,
+                67
+            ],
+            "x": 8,
+            "y": 6
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 1,
+            "id": 69,
+            "neighbors": [
+                59,
+                79,
+                68
+            ],
+            "x": 9,
+            "y": 6
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 3,
+            "id": 70,
+            "neighbors": [
+                60,
+                71,
+                80
+            ],
+            "x": 0,
+            "y": 7
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 3,
+            "id": 71,
+            "neighbors": [
+                61,
+                72,
+                81,
+                70
+            ],
+            "x": 1,
+            "y": 7
+        },
+        {
+            "bundle_id": 2,
+            "figure_id": 4,
+            "id": 72,
+            "neighbors": [
+                62,
+                73,
+                82,
+                71
+            ],
+            "x": 2,
+            "y": 7
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 13,
+            "id": 73,
+            "neighbors": [
+                63,
+                74,
+                83,
+                72
+            ],
+            "x": 3,
+            "y": 7
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 15,
+            "id": 74,
+            "neighbors": [
+                64,
+                75,
+                84,
+                73
+            ],
+            "x": 4,
+            "y": 7
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 10,
+            "id": 75,
+            "neighbors": [
+                65,
+                76,
+                85,
+                74
+            ],
+            "x": 5,
+            "y": 7
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 10,
+            "id": 76,
+            "neighbors": [
+                66,
+                77,
+                86,
+                75
+            ],
+            "x": 6,
+            "y": 7
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 10,
+            "id": 77,
+            "neighbors": [
+                67,
+                78,
+                87,
+                76
+            ],
+            "x": 7,
+            "y": 7
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 1,
+            "id": 78,
+            "neighbors": [
+                68,
+                79,
+                88,
+                77
+            ],
+            "x": 8,
+            "y": 7
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 1,
+            "id": 79,
+            "neighbors": [
+                69,
+                89,
+                78
+            ],
+            "x": 9,
+            "y": 7
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 3,
+            "id": 80,
+            "neighbors": [
+                70,
+                81,
+                90
+            ],
+            "x": 0,
+            "y": 8
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 3,
+            "id": 81,
+            "neighbors": [
+                71,
+                82,
+                91,
+                80
+            ],
+            "x": 1,
+            "y": 8
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 3,
+            "id": 82,
+            "neighbors": [
+                72,
+                83,
+                92,
+                81
+            ],
+            "x": 2,
+            "y": 8
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 13,
+            "id": 83,
+            "neighbors": [
+                73,
+                84,
+                93,
+                82
+            ],
+            "x": 3,
+            "y": 8
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 13,
+            "id": 84,
+            "neighbors": [
+                74,
+                85,
+                94,
+                83
+            ],
+            "x": 4,
+            "y": 8
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 16,
+            "id": 85,
+            "neighbors": [
+                75,
+                86,
+                95,
+                84
+            ],
+            "x": 5,
+            "y": 8
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 10,
+            "id": 86,
+            "neighbors": [
+                76,
+                87,
+                96,
+                85
+            ],
+            "x": 6,
+            "y": 8
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 10,
+            "id": 87,
+            "neighbors": [
+                77,
+                88,
+                97,
+                86
+            ],
+            "x": 7,
+            "y": 8
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 1,
+            "id": 88,
+            "neighbors": [
+                78,
+                89,
+                98,
+                87
+            ],
+            "x": 8,
+            "y": 8
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 1,
+            "id": 89,
+            "neighbors": [
+                79,
+                99,
+                88
+            ],
+            "x": 9,
+            "y": 8
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 3,
+            "id": 90,
+            "neighbors": [
+                80,
+                91
+            ],
+            "x": 0,
+            "y": 9
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 3,
+            "id": 91,
+            "neighbors": [
+                81,
+                92,
+                90
+            ],
+            "x": 1,
+            "y": 9
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 13,
+            "id": 92,
+            "neighbors": [
+                82,
+                93,
+                91
+            ],
+            "x": 2,
+            "y": 9
+        },
+        {
+            "bundle_id": 4,
+            "figure_id": 13,
+            "id": 93,
+            "neighbors": [
+                83,
+                94,
+                92
+            ],
+            "x": 3,
+            "y": 9
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 16,
+            "id": 94,
+            "neighbors": [
+                84,
+                95,
+                93
+            ],
+            "x": 4,
+            "y": 9
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 16,
+            "id": 95,
+            "neighbors": [
+                85,
+                96,
+                94
+            ],
+            "x": 5,
+            "y": 9
+        },
+        {
+            "bundle_id": 0,
+            "figure_id": 16,
+            "id": 96,
+            "neighbors": [
+                86,
+                97,
+                95
+            ],
+            "x": 6,
+            "y": 9
+        },
+        {
+            "bundle_id": 3,
+            "figure_id": 10,
+            "id": 97,
+            "neighbors": [
+                87,
+                98,
+                96
+            ],
+            "x": 7,
+            "y": 9
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 1,
+            "id": 98,
+            "neighbors": [
+                88,
+                99,
+                97
+            ],
+            "x": 8,
+            "y": 9
+        },
+        {
+            "bundle_id": 1,
+            "figure_id": 1,
+            "id": 99,
+            "neighbors": [
+                89,
+                98
+            ],
+            "x": 9,
+            "y": 9
+        }
+    ],
+    "grid": {
+        "height": 10,
+        "type": 0,
+        "width": 10
+    }
+}
