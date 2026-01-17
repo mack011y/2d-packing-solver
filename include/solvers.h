@@ -5,135 +5,150 @@
 #include <set>
 #include <memory>
 #include <functional>
-#include <random> // Added for rng in header
-#include "heuristics.h" // Подключаем модуль эвристик
+#include <random> 
+#include "heuristics.h" 
 
-// --- Shared Helpers ---
+// --- Вспомогательные функции ---
+
 // Пытается наложить граф фигуры (figure) на граф сетки (grid).
-// Возвращает список занятых узлов сетки или пустой список при неудаче.
+// Это "сердце" геометрических проверок всех алгоритмов.
+// 
+// Аргументы:
+// - grid: указатель на сетку (большой граф)
+// - anchor_id: ID узла сетки, к которому мы прикладываем "нулевой" узел фигуры (якорь)
+// - figure: указатель на фигуру (малый граф)
+// - rotation: целочисленный поворот (сдвиг портов: 0, 1, 2...). 
+//
+// Возвращает:
+// - Список ID узлов сетки, которые займет фигура.
+// - Пустой список, если фигура не влезает (выход за границы, самопересечение, несовпадение топологии).
 std::vector<int> get_embedding(std::shared_ptr<Grid> grid, int anchor_id, std::shared_ptr<Figure> figure, int rotation);
 
 
-// Base Solver Interface
-// Базовый класс для всех решателей.
-// Предоставляет общий интерфейс и хранит ссылки на граф (поле) и бандлы (фигуры).
+// --- Configuration ---
+struct SolverConfig {
+    // GRASP
+    int grasp_max_iterations = 50;
+    float grasp_alpha = 0.8f;
+
+    // Simulated Annealing
+    int sa_max_iterations = 20000;
+    float sa_initial_temp = 5000.0f;
+    float sa_cooling_rate = 0.9995f;
+
+    // Genetic Algorithms
+    int ga_population_size = 50;
+    int ga_generations = 50;
+    float ga_mutation_rate = 0.1f;
+    int ga_elite_count = 5;
+
+    // Debug / Output
+    bool verbose = false;
+};
+
+// --- Базовый Интерфейс Решателя (Solver) ---
+// Все алгоритмы наследуются от этого класса.
 class Solver {
 public:
-    std::shared_ptr<Grid> graph; // Поле для замощения
-    std::vector<Bundle> bundles; // Набор фигур (в бандлах)
-    std::vector<int> placed_bundles; // Результат: список ID успешно размещенных бандлов
+    std::shared_ptr<Grid> graph;     // Поле для замощения
+    std::vector<Bundle> bundles;     // Полный список фигур ("инвентарь")
+    std::vector<int> placed_bundles; // Результат: список ID бандлов, которые удалось разместить
+    SolverConfig config;             // Конфигурация
     
-    Solver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b) 
-        : graph(g), bundles(b) {}
+    Solver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b, SolverConfig cfg = SolverConfig()) 
+        : graph(g), bundles(b), config(cfg) {}
     
-    // Чистая виртуальная функция, которую должен реализовать каждый конкретный алгоритм.
-    // Возвращает оценку качества решения (Score).
+    // Основной метод запуска. Должен быть реализован в наследниках.
+    // Возвращает итоговый Score (обычно количество занятых клеток).
     virtual float solve() = 0;
     virtual ~Solver() = default;
 };
 
-// DLX Solver (Exact Cover)
-// Реализация алгоритма "Танцующие ссылки" (Dancing Links) Дональда Кнута.
-// Преобразует задачу в матрицу точного покрытия.
+// --- 1. DLX Solver (Exact Cover) ---
 class DLXSolver : public Solver {
 public:
-    DLXSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b) 
-        : Solver(g, b) {}
+    DLXSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b, SolverConfig cfg = SolverConfig()) 
+        : Solver(g, b, cfg) {}
         
     float solve() override;
     
 private:
     struct MatrixRow {
         int id;
-        std::set<std::string> cols;
-        // Данные для восстановления:
-        std::shared_ptr<Figure> figure; // Какой подграф
-        int anchor_grid_id;             // В каком узле сетки якорь (узел 0 фигуры)
-        int rotation;                   // Поворот (смещение портов)
+        std::set<std::string> cols;     // Столбцы, которые покрывает эта строка
+        // Данные для восстановления решения:
+        std::shared_ptr<Figure> figure; // Какую фигуру кладем
+        int anchor_grid_id;             // В какой узел сетки
+        int rotation;                   // С каким поворотом
         int bundle_id;
     };
     
-    std::map<int, MatrixRow> rows;
-    std::map<std::string, std::set<int>> cols;
+    std::map<int, MatrixRow> rows;          // Строки матрицы
+    std::map<std::string, std::set<int>> cols; // Столбцы матрицы
     
-    bool search(std::vector<int>& solution);
+    bool search(std::vector<int>& solution); // Рекурсивный поиск
     void apply_solution(const std::vector<int>& solution);
 };
 
-// GRASP Solver
-// Greedy Randomized Adaptive Search Procedure.
-// Строит решение жадно, но с элементами случайности, чтобы исследовать разные варианты.
+// --- 2. GRASP Solver ---
 class GRASPSolver : public Solver {
 public:
-    int max_iterations = 5; // Было 100, ставим 5 для теста 60x60
-    float alpha = 0.8f; // Параметр жадности (1.0 = чисто жадный, 0.0 = чисто случайный)
-
-    GRASPSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b) 
-        : Solver(g, b) {}
+    GRASPSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b, SolverConfig cfg = SolverConfig()) 
+        : Solver(g, b, cfg) {}
         
     float solve() override;
     
 private:
     struct SolutionState {
         float score;
-        std::map<int, int> node_allocations;
-        std::map<int, int> node_figure_ids; // Added field
-        std::vector<int> placed_bundle_ids;
+        std::map<int, int> node_allocations; // Карта занятых узлов (GridID -> BundleID)
+        std::map<int, int> node_figure_ids;  // Карта фигур (GridID -> FigureID)
+        std::vector<int> placed_bundle_ids;  // Список размещенных бандлов
     };
 
     float run_construction_phase(SolutionState& state);
 };
 
-// Simulated Annealing Solver (Permutation-based)
-// Имитация отжига. Оптимизирует порядок (перестановку) и эвристики размещения фигур.
+// --- 3. Simulated Annealing Solver (Permutation-based) ---
 class SimulatedAnnealingSolver : public Solver {
 public:
-    int max_iterations = 20000;
-    float initial_temp = 5000.0f;
-    float cooling_rate = 0.9995f;
-
-    SimulatedAnnealingSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b) 
-        : Solver(g, b) {}
+    SimulatedAnnealingSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b, SolverConfig cfg = SolverConfig()) 
+        : Solver(g, b, cfg) {}
         
     float solve() override;
     
 private:
+    // "Ген" решения: какую фигуру взять и как (по какой стратегии) её положить
     struct Gene {
         int bundle_id;
-        int heuristic;
+        int heuristic; // ID эвристики (HeuristicType)
     };
     
     struct State {
-        std::vector<Gene> sequence; // Permutation of all bundles
-        float energy; // Cached energy (negative score)
-        // Для кэширования результата (чтобы не строить заново для визуализации)
-        // В реальном SA это не нужно хранить в стейте, но мы сохраним для финала
+        std::vector<Gene> sequence; // Перестановка (хромосома)
+        float energy;               // Энергия состояния (отрицательный score)
     };
 
+    // Структура для хранения результата размещения одной фигуры
     struct PlacedShape {
         int anchor_id;
         int rotation;
         std::shared_ptr<Figure> figure;
-        std::vector<int> footprint;
+        std::vector<int> footprint; // Занятые клетки
     };
 
-    // Строит решение из последовательности и возвращает "Энергию" (отрицательный score)
+    // Строит полное решение из последовательности генов и возвращает энергию
     float evaluate_sequence(const std::vector<Gene>& sequence, std::map<int, std::vector<PlacedShape>>* out_placement = nullptr);
     
+    // Создает соседнее состояние (мутация: обмен фигур местами или смена эвристики)
     State get_neighbor(const State& current, std::mt19937& rng);
 };
 
-// Genetic Algorithm Solver (Coordinate-based)
-// Классический генетический алгоритм. Особь кодирует координаты размещения фигур.
+// --- 4. Genetic Algorithm Solver (Coordinate-based) ---
 class GeneticAlgorithmSolver : public Solver {
 public:
-    int population_size = 50;
-    int generations = 5; // Было 10, ставим 5 для теста
-    float mutation_rate = 0.1f;
-    int elite_count = 5;
-
-    GeneticAlgorithmSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b) 
-        : Solver(g, b) {}
+    GeneticAlgorithmSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b, SolverConfig cfg = SolverConfig()) 
+        : Solver(g, b, cfg) {}
         
     float solve() override;
 
@@ -146,10 +161,9 @@ private:
     };
 
     struct Individual {
-        // bundle_id -> list of placed shapes
+        // Генотип: bundle_id -> список размещенных фигур
         std::map<int, std::vector<PlacedShape>> active_bundles;
-        // set of occupied grid node IDs (for fast collision check)
-        // OPTIMIZATION: Replaced std::set with std::vector<char> for O(1) access
+        // Фенотип: список занятых узлов (для быстрой проверки коллизий O(1))
         std::vector<char> occupied_nodes; 
         float fitness;
     };
@@ -159,54 +173,46 @@ private:
     Individual crossover(const Individual& p1, const Individual& p2, std::mt19937& rng);
     void mutate(Individual& ind, std::mt19937& rng);
     
-    // Helper to try add a bundle to an individual
+    // Refactored helper methods
     bool try_add_bundle(Individual& ind, int bundle_id, std::mt19937& rng);
+    std::vector<int> find_potential_anchors(const Individual& ind, const Bundle* bundle, std::mt19937& rng);
+    bool try_place_shapes_at_anchor(Individual& ind, const Bundle* bundle, int anchor_candidate, std::mt19937& rng);
 };
 
-    // Genetic Permutation Solver (Order-based with Hyper-Heuristics)
-    // Новый ГА. Особь кодирует ПОРЯДОК (перестановку) фигур и ЭВРИСТИКУ размещения.
-    // Размещение выполняется "Строителем" (Builder), который применяет выбранную эвристику.
-    class GeneticPermutationSolver : public Solver {
-    public:
-        int population_size = 10;
-        int generations = 20;
-        float mutation_rate = 0.4f;
-        int elite_count = 2;
+// --- 5. Genetic Permutation Solver ---
+class GeneticPermutationSolver : public Solver {
+public:
+    GeneticPermutationSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b, SolverConfig cfg = SolverConfig()) 
+        : Solver(g, b, cfg) {}
+        
+    float solve() override;
 
-        GeneticPermutationSolver(std::shared_ptr<Grid> g, const std::vector<Bundle>& b) 
-            : Solver(g, b) {}
-            
-        float solve() override;
-
-    private:
-        // Enum HeuristicType теперь берется из heuristics.h
-
-        struct Gene {
-            int bundle_id;
-            int heuristic; // Теперь это int, который кастится к HeuristicType
-        };
-
-        struct PlacedShape {
-            int anchor_id;
-            int rotation;
-            std::shared_ptr<Figure> figure;
-            std::vector<int> footprint;
-        };
-
-        struct PlacementResult {
-            float score;
-            std::map<int, std::vector<PlacedShape>> active_bundles; 
-            // OPTIMIZATION: Used vector for fast lookup
-            std::vector<char> occupied_nodes;
-        };
-
-        struct Individual {
-            std::vector<Gene> chromosome; 
-            float fitness;
-        };
-
-        PlacementResult build_solution(const std::vector<Gene>& chromosome);
-        Individual create_random_individual(std::mt19937& rng);
-        Individual crossover(const Individual& p1, const Individual& p2, std::mt19937& rng);
-        void mutate(Individual& ind, std::mt19937& rng);
+private:
+    struct Gene {
+        int bundle_id;
+        int heuristic;
     };
+
+    struct PlacedShape {
+        int anchor_id;
+        int rotation;
+        std::shared_ptr<Figure> figure;
+        std::vector<int> footprint;
+    };
+
+    struct PlacementResult {
+        float score;
+        std::map<int, std::vector<PlacedShape>> active_bundles; 
+        std::vector<char> occupied_nodes;
+    };
+
+    struct Individual {
+        std::vector<Gene> chromosome; 
+        float fitness;
+    };
+
+    PlacementResult build_solution(const std::vector<Gene>& chromosome);
+    Individual create_random_individual(std::mt19937& rng);
+    Individual crossover(const Individual& p1, const Individual& p2, std::mt19937& rng);
+    void mutate(Individual& ind, std::mt19937& rng);
+};

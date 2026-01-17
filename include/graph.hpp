@@ -17,8 +17,6 @@ private:
 public:
     Node() : id(-1), neighbors() {}
 
-    // Конструктор узла
-    // max_ports: максимальная степень вершины (например, 4 для квадратной сетки)
     Node(int id, int max_ports, const T& initial_data = T()) 
         : id(id), data(initial_data) {
         neighbors.resize(max_ports, -1); // -1 означает отсутствие связи (пустой порт)

@@ -76,6 +76,20 @@ int main(int argc, char* argv[]) {
         PuzzleGenerator generator(config);
         std::shared_ptr<Grid> grid;
         auto result = generator.generate(grid);
+        
+        // 1. Сохраняем "Ответ" (Target) - идеальное разбиение до очистки
+        std::string target_path = args.output;
+        // Заменяем .json на _target.json, если получится, иначе просто добавляем
+        size_t lastindex = target_path.find_last_of("."); 
+        if (lastindex != std::string::npos) {
+            target_path = target_path.substr(0, lastindex) + "_target" + target_path.substr(lastindex); 
+        } else {
+            target_path += "_target.json";
+        }
+        Serializer::save_json(target_path, grid, result.first);
+        std::cout << "Generated target solution: " << target_path << std::endl;
+
+        // 2. Очищаем сетку для создания задачи
         for(auto& node : grid->get_nodes()) {
             node.get_data().bundle_id = -1;
             node.get_data().figure_id = -1;

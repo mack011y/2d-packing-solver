@@ -7,11 +7,12 @@
 
 using json = nlohmann::json;
 
+// Класс для загрузки конфигурации генератора
 class ConfigLoader {
 public:
     static GeneratorConfig load(const std::string& filename) {
         GeneratorConfig cfg;
-        // Значения по умолчанию
+        // Значения по умолчанию (если конфиг поврежден или отсутствует)
         cfg.width = 10;
         cfg.height = 10;
         cfg.min_shape_size = 3;

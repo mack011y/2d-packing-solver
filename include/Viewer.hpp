@@ -6,40 +6,44 @@
 #include <string>
 #include "core.hpp"
 
+// Класс Визуализатора
+// Отвечает за создание окна, обработку ввода и отрисовку состояния задачи.
 class Viewer {
 public:
     Viewer();
+    // Основной цикл приложения
     void run(const std::string& filename);
 
 private:
     sf::RenderWindow window;
-    sf::View view;
+    sf::View view;          // Камера (для зума и панорамирования)
     sf::Font font;
     bool fontLoaded = false;
 
-    // Data
+    // Данные задачи
     std::shared_ptr<Grid> grid;
     std::vector<Bundle> bundles;
-    std::map<int, sf::Color> bundleColors;
+    std::map<int, sf::Color> bundleColors; // Кэш цветов для быстрого доступа
     
-    // UI State
-    float cellSize = 30.0f;
+    // Состояние интерфейса
+    float cellSize = 30.0f; // Размер одной клетки в пикселях
     bool isDragging = false;
     sf::Vector2i lastMousePos;
-    int hoveredNodeId = -1;
+    int hoveredNodeId = -1; // ID узла под курсором мыши
     
-    // Resources
-    sf::Texture hatchTexture;
+    // Ресурсы
+    sf::Texture hatchTexture; // Текстура штриховки для выделения
 
-    // Methods
-    void createHatchTextures();
-    bool loadData(const std::string& filename);
-    void handleEvents();
-    void render();
-    void drawGrid();
-    void drawOverlay();
-    void drawLegend();
+    // Внутренние методы
+    void createHatchTextures(); // Генерация текстур программно
+    bool loadData(const std::string& filename); // Загрузка JSON
+    void handleEvents(); // Обработка мыши и клавиатуры
+    void render();       // Главный метод отрисовки кадра
+    void drawGrid();     // Рисование сетки и фигур
+    void drawOverlay();  // Рисование текста поверх (HUD)
+    void drawLegend();   // Рисование легенды (цветовой шкалы)
     
+    // Конвертация координат сетки (X, Y) в координаты экрана (PixelX, PixelY)
     sf::Vector2f getNodePosition(int x, int y, GridType type);
     sf::Color getBundleColor(int id);
 };

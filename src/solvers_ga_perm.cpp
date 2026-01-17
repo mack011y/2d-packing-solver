@@ -12,7 +12,8 @@
 GeneticPermutationSolver::PlacementResult GeneticPermutationSolver::build_solution(const std::vector<Gene>& chromosome) {
     PlacementResult result;
     result.score = 0;
-    std::set<int> occupied;
+    // Используем векторную маску для O(1) проверок
+    std::vector<char> occupied(graph->size(), 0);
     
     for(const auto& gene : chromosome) {
         int bid = gene.bundle_id;
@@ -22,13 +23,13 @@ GeneticPermutationSolver::PlacementResult GeneticPermutationSolver::build_soluti
         if(!bundle) continue;
 
         std::vector<PlacedShape> placed_shapes;
-        std::set<int> temp_occupied = occupied;
+        std::vector<char> temp_occupied = occupied;
         bool possible = true;
 
         for(const auto& shape : bundle->get_shapes()) {
             HeuristicType h_type = static_cast<HeuristicType>(gene.heuristic);
             
-            // 1. Получаем список кандидатов через модуль эвристик
+            // 1. Получаем список кандидатов (передаем вектор)
             std::vector<int> candidates = Heuristics::get_candidates(h_type, graph, temp_occupied);
 
             // 2. Оценка кандидатов
@@ -44,11 +45,11 @@ GeneticPermutationSolver::PlacementResult GeneticPermutationSolver::build_soluti
                     
                     bool clash = false;
                     for(int nid : fp) {
-                        if(temp_occupied.count(nid)) { clash = true; break; } 
+                        if(temp_occupied[nid]) { clash = true; break; } 
                     }
                     
                     if(!clash) {
-                        // Оценка через модуль эвристик
+                        // Оценка тоже через вектор
                         float score = Heuristics::evaluate(h_type, graph, temp_occupied, fp);
 
                         if(score > best_score) {
@@ -68,7 +69,8 @@ GeneticPermutationSolver::PlacementResult GeneticPermutationSolver::build_soluti
                 ps.figure = shape;
                 ps.footprint = best_fp;
                 placed_shapes.push_back(ps);
-                for(int nid : best_fp) temp_occupied.insert(nid);
+                
+                for(int nid : best_fp) temp_occupied[nid] = 1;
             } else {
                 possible = false;
                 break;
@@ -82,6 +84,8 @@ GeneticPermutationSolver::PlacementResult GeneticPermutationSolver::build_soluti
         }
     }
     
+    // Сохраняем маску в результат (если понадобится)
+    result.occupied_nodes = occupied;
     return result;
 }
 
@@ -168,19 +172,21 @@ void GeneticPermutationSolver::mutate(Individual& ind, std::mt19937& rng) {
 }
 
 float GeneticPermutationSolver::solve() {
-    std::cout << "GA-Hyper: Starting Hyper-Heuristic GA (" << generations << " gens, pop=" << population_size << ")..." << std::endl;
+    if (config.verbose) {
+        std::cout << "GA-Hyper: Starting Hyper-Heuristic GA (" << config.ga_generations << " gens, pop=" << config.ga_population_size << ")..." << std::endl;
+    }
     
     std::random_device rd;
     std::mt19937 rng(rd());
     
     std::vector<Individual> population;
-    for(int i=0; i<population_size; ++i) {
+    for(int i=0; i<config.ga_population_size; ++i) {
         population.push_back(create_random_individual(rng));
     }
     
     Individual best_ever = population[0];
     
-    for(int gen=0; gen<generations; ++gen) {
+    for(int gen=0; gen<config.ga_generations; ++gen) {
         std::sort(population.begin(), population.end(), [](const Individual& a, const Individual& b){
             return a.fitness > b.fitness;
         });
@@ -189,14 +195,16 @@ float GeneticPermutationSolver::solve() {
             best_ever = population[0];
         }
         
-        if (gen % 1 == 0) {
+        if (config.verbose && gen % 1 == 0) {
             std::cout << "Gen " << gen << " | Best Fitness: " << best_ever.fitness << "\r" << std::flush;
         }
         
         std::vector<Individual> new_pop;
-        for(int i=0; i<elite_count && i < population.size(); ++i) new_pop.push_back(population[i]);
+        // Элитизм
+        for(int i=0; i<config.ga_elite_count && i < (int)population.size(); ++i) new_pop.push_back(population[i]);
         
-        while(new_pop.size() < population_size) {
+        while((int)new_pop.size() < config.ga_population_size) {
+            // Турнирный отбор
             int t_size = 3;
             Individual p1 = population[std::uniform_int_distribution<>(0, population.size()-1)(rng)];
             for(int k=0; k<t_size-1; ++k) {
@@ -210,7 +218,7 @@ float GeneticPermutationSolver::solve() {
             }
             
             Individual child = crossover(p1, p2, rng);
-            if (std::uniform_real_distribution<>(0, 1)(rng) < mutation_rate) {
+            if (std::uniform_real_distribution<>(0, 1)(rng) < config.ga_mutation_rate) {
                 mutate(child, rng);
             }
             new_pop.push_back(child);
@@ -218,7 +226,9 @@ float GeneticPermutationSolver::solve() {
         population = new_pop;
     }
     
-    std::cout << "\nGA-Hyper Finished." << std::endl;
+    if (config.verbose) {
+        std::cout << "\nGA-Hyper Finished." << std::endl;
+    }
     
     auto final_res = build_solution(best_ever.chromosome);
     

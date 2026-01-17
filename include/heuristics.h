@@ -1,35 +1,36 @@
 #pragma once
 #include "core.hpp"
 #include <vector>
-#include <set>
 #include <memory>
 
-// Типы доступных эвристик
+// Типы доступных эвристик (стратегий размещения)
 enum HeuristicType {
-    MAX_CONTACT = 0,    // Максимизация числа соседей
+    MAX_CONTACT = 0,    // Максимизация числа соседей (сборка пазла)
     BOTTOM_LEFT = 1,    // Классический "Тетрис" (левее и ниже)
     MIN_HOLES = 2,      // Минимизация "дыр" (пустых соседей)
-    CENTER_GRAVITY = 3, // Тяготение к центру
+    WALL_HUGGING = 3,   // "Вдоль стен": приоритет краям поля
     HEURISTIC_COUNT = 4
 };
 
+// Класс для оценки качества размещения фигур
 class Heuristics {
 public:
-    // Главная функция оценки. 
-    // Возвращает "очки" за размещение фигуры в anchor_node с поворотом rotation.
-    // Чем больше очков, тем лучше вариант.
+    // Оценка "качества" позиции.
+    // Возвращает числовой score. Чем больше, тем лучше позиция.
+    // occupied_mask: Векторная маска всего поля (1 = занято, 0 = свободно). Размер = W*H.
+    // footprint: список ID клеток, которые займет фигура.
     static float evaluate(
         HeuristicType type,
         const std::shared_ptr<Grid>& grid,
-        const std::set<int>& occupied,
-        const std::vector<int>& footprint // Список узлов, куда встанет фигура
+        const std::vector<char>& occupied_mask, // Быстрая проверка O(1)
+        const std::vector<int>& footprint 
     );
 
-    // Вспомогательная функция для выбора кандидатов (оптимизация перебора).
-    // Возвращает список узлов-якорей, которые имеет смысл проверять для данной стратегии.
+    // Оптимизация поиска: возвращает список перспективных точек (якорей) для проверки.
+    // occupied_mask: маска занятости поля.
     static std::vector<int> get_candidates(
         HeuristicType type,
         const std::shared_ptr<Grid>& grid,
-        const std::set<int>& occupied
+        const std::vector<char>& occupied_mask
     );
 };

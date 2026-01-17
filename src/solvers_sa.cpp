@@ -9,16 +9,14 @@
 #include <set>
 
 // --- Simulated Annealing Implementation (Permutation-Based) ---
-// Теперь алгоритм работает так:
-// 1. Состояние = упорядоченный список всех бандлов + выбор эвристики для каждого.
-// 2. Энергия = - (площадь покрытия), вычисляемая путем жадного размещения по очереди ("Тетрис").
-// 3. Шаг (Neighbor) = поменять местами два бандла в очереди ИЛИ сменить эвристику.
+// Алгоритм имитации отжига на перестановках.
+// 1. Состояние = список бандлов в определенном порядке + выбранная эвристика для каждого.
+// 2. Энергия = отрицательная площадь покрытия (чем меньше энергия, тем больше покрыли).
+// 3. Шаг = обмен бандлов местами или смена эвристики.
 
 float SimulatedAnnealingSolver::evaluate_sequence(const std::vector<Gene>& sequence, std::map<int, std::vector<PlacedShape>>* out_placement) {
-    // Вектор занятости (оптимизированный)
+    // Векторная маска занятости (O(1))
     std::vector<char> occupied(graph->size(), 0);
-    // Для эвристик нужен set, так как там интерфейс просит set (можно оптимизировать и там, но пока так)
-    std::set<int> occupied_set;
     
     float total_area = 0;
     
@@ -31,14 +29,14 @@ float SimulatedAnnealingSolver::evaluate_sequence(const std::vector<Gene>& seque
         if(!bundle) continue;
 
         std::vector<PlacedShape> current_bundle_shapes;
-        std::set<int> temp_occupied_set = occupied_set; // Копия для отката
+        std::vector<char> temp_occupied = occupied; // Копия маски для отката, если бандл не влезет целиком
         bool possible = true;
 
         for(const auto& shape : bundle->get_shapes()) {
             HeuristicType h_type = static_cast<HeuristicType>(gene.heuristic);
             
-            // 1. Получаем кандидатов (используем существующий модуль)
-            std::vector<int> candidates = Heuristics::get_candidates(h_type, graph, temp_occupied_set);
+            // 1. Получаем кандидатов (теперь передаем векторную маску)
+            std::vector<int> candidates = Heuristics::get_candidates(h_type, graph, temp_occupied);
 
             float best_s = -1e9;
             int best_anchor = -1;
@@ -52,11 +50,12 @@ float SimulatedAnnealingSolver::evaluate_sequence(const std::vector<Gene>& seque
                     
                     bool clash = false;
                     for(int nid : fp) {
-                        if(occupied[nid]) { clash = true; break; } // Быстрая проверка
+                        if(temp_occupied[nid]) { clash = true; break; } // Быстрая проверка
                     }
                     
                     if(!clash) {
-                        float s = Heuristics::evaluate(h_type, graph, temp_occupied_set, fp);
+                        // Оценка тоже через векторную маску
+                        float s = Heuristics::evaluate(h_type, graph, temp_occupied, fp);
                         if(s > best_s) {
                             best_s = s;
                             best_anchor = anchor;
@@ -75,8 +74,9 @@ float SimulatedAnnealingSolver::evaluate_sequence(const std::vector<Gene>& seque
                 ps.footprint = best_fp;
                 current_bundle_shapes.push_back(ps);
                 
+                // Временно занимаем место (обновляем маску)
                 for(int nid : best_fp) {
-                    temp_occupied_set.insert(nid);
+                    temp_occupied[nid] = 1;
                 }
             } else {
                 possible = false;
@@ -85,11 +85,8 @@ float SimulatedAnnealingSolver::evaluate_sequence(const std::vector<Gene>& seque
         }
 
         if (possible) {
-            // Фиксируем размещение
-            for(const auto& ps : current_bundle_shapes) {
-                for(int nid : ps.footprint) occupied[nid] = 1;
-            }
-            occupied_set = temp_occupied_set;
+            // Если весь бандл влез, фиксируем изменения в основной маске
+            occupied = temp_occupied;
             total_area += (float)bundle->get_total_area();
             
             if (out_placement) {
@@ -98,7 +95,6 @@ float SimulatedAnnealingSolver::evaluate_sequence(const std::vector<Gene>& seque
         }
     }
     
-    // Энергия должна минимизироваться, поэтому возвращаем отрицательную площадь
     return -total_area;
 }
 
@@ -109,14 +105,14 @@ SimulatedAnnealingSolver::State SimulatedAnnealingSolver::get_neighbor(const Sta
 
     std::uniform_real_distribution<> r_dist(0, 1);
     
-    // 1. Swap Mutation (70% chance)
+    // 1. Swap Mutation (70% шанс) - меняем местами два бандла в очереди
     if (r_dist(rng) < 0.7) {
         std::uniform_int_distribution<> idx_dist(0, n-1);
         int i = idx_dist(rng);
         int j = idx_dist(rng);
         std::swap(next.sequence[i], next.sequence[j]);
     } 
-    // 2. Heuristic Mutation (30% chance)
+    // 2. Heuristic Mutation (30% шанс) - меняем стратегию для одного бандла
     else {
         std::uniform_int_distribution<> idx_dist(0, n-1);
         std::uniform_int_distribution<> h_dist(0, HEURISTIC_COUNT - 1);
@@ -129,11 +125,9 @@ SimulatedAnnealingSolver::State SimulatedAnnealingSolver::get_neighbor(const Sta
 }
 
 float SimulatedAnnealingSolver::solve() {
-    int max_iterations = 50; // МИКРО-ТЕСТ
-    float initial_temp = 5000.0f;
-    float cooling_rate = 0.95f; 
-
-    std::cout << "SA (Permutation): Starting optimization (" << max_iterations << " iters)..." << std::endl;
+    if (config.verbose) {
+        std::cout << "SA (Permutation): Starting optimization (" << config.sa_max_iterations << " iters)..." << std::endl;
+    }
     std::random_device rd;
     std::mt19937 rng(rd());
     
@@ -151,17 +145,19 @@ float SimulatedAnnealingSolver::solve() {
     current.energy = evaluate_sequence(current.sequence);
     State best = current;
     
-    float T = initial_temp;
-    
-    int stagnation_counter = 0;
-    float last_best_energy = best.energy;
+    float T = config.sa_initial_temp;
     float target_energy = -(float)graph->size();
 
-    for(int i=0; i<max_iterations; ++i) {
-        // ВЫВОД КАЖДОЙ ИТЕРАЦИИ
-        std::cout << "SA Iter " << i << "/" << max_iterations 
-                  << " | T=" << (int)T 
-                  << " | Score=" << -best.energy << "\n" << std::flush;
+    // Логирование реже, чтобы не спамить в консоль
+    int log_interval = config.sa_max_iterations / 20;
+    if (log_interval == 0) log_interval = 1;
+
+    for(int i=0; i<config.sa_max_iterations; ++i) {
+        if (config.verbose && i % log_interval == 0) {
+            std::cout << "SA Iter " << i << "/" << config.sa_max_iterations 
+                      << " | T=" << (int)T 
+                      << " | Score=" << -best.energy << "\n" << std::flush;
+        }
 
         if (best.energy <= target_energy) {
             std::cout << "\nSA: Perfect solution found!" << std::endl;
@@ -169,21 +165,23 @@ float SimulatedAnnealingSolver::solve() {
         }
 
         State neighbor = get_neighbor(current, rng);
-        
         float delta = neighbor.energy - current.energy;
         
+        // Критерий Метрополиса
         if (delta < 0 || std::exp(-delta / T) > std::uniform_real_distribution<>(0, 1)(rng)) {
             current = neighbor;
             if (current.energy < best.energy) {
                 best = current;
-                stagnation_counter = 0;
             }
         }
         
-        T *= cooling_rate;
+        T *= config.sa_cooling_rate;
     }
-    std::cout << "\nSA Finished." << std::endl;
+    if (config.verbose) {
+        std::cout << "\nSA Finished. Best Score: " << -best.energy << std::endl;
+    }
     
+    // Финализация: применяем лучшее решение к сетке
     std::map<int, std::vector<PlacedShape>> final_placement;
     evaluate_sequence(best.sequence, &final_placement);
     

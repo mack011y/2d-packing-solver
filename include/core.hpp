@@ -17,7 +17,7 @@ struct Color {
     int r, g, b;
 };
 
-// Данные для ячейки поля (координаты + информация о занятости)
+// Данные для ячейки поля
 struct GridCellData {
     int x, y;        // Координаты клетки на сетке
     int bundle_id;   // ID набора (бандла), который занял эту клетку (-1 если пусто)
@@ -32,7 +32,7 @@ struct GridCellData {
 class Grid : public Graph<GridCellData> {
 private:
     int width, height; // Размеры сетки
-    GridType type;     // Тип топологии
+    GridType type;     // Тип сетки
 
 public:
     // Конструктор сетки: инициализирует граф с нужным количеством портов
@@ -54,15 +54,14 @@ public:
     }
 };
 
-// Данные для узла фигуры (пока пустая структура, но можно расширить)
+// Данные для узла фигуры (пока пустая структура, потому что фигуры однородные)
 struct FigureNodeData {};
 
 // Фигура (Figure)
-// Представляет собой связный подграф сетки, который нужно разместить.
-// Наследуется от Graph<FigureNodeData>.
+// Представляет собой СВЯЗНЫЙ подграф сетки, который нужно разместить.
 class Figure : public Graph<FigureNodeData> {
 public:
-    std::string name; // Имя фигуры (для отладки/визуализации)
+    std::string name; 
     
     Figure(std::string n, int mp) : Graph<FigureNodeData>(mp), name(n) {}
 };
@@ -77,7 +76,7 @@ private:
     Color color;                                 // Цвет для визуализации
 
 public:
-    Bundle() : id(-1), total_area(0), color{255, 255, 255} {}
+    Bundle() : id(-1), total_area(0), color{255, 255, 255} {} // Белый вет
 
     // Конструктор с перемещением вектора фигур (для эффективности)
     Bundle(int id, std::vector<std::shared_ptr<Figure>> shapes, const Color& color)

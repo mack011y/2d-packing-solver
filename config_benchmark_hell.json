@@ -1,9 +1,0 @@
-{
-    "width": 60,
-    "height": 60,
-    "grid_type": 0,
-    "min_shape_size": 15,
-    "max_shape_size": 100,
-    "min_bundle_area": 100,
-    "max_bundle_area": 200
-}

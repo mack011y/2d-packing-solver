@@ -20,18 +20,11 @@ float GeneticAlgorithmSolver::calculate_fitness(const Individual& ind) {
     return area;
 }
 
-// Попытка добавить бандл в особь с использованием "Sticky Heuristic"
-// Эта функция пытается найти место для всех фигур бандла так, чтобы они примыкали к существующим.
-bool GeneticAlgorithmSolver::try_add_bundle(Individual& ind, int bundle_id, std::mt19937& rng) {
-    const Bundle* target_bundle = nullptr;
-    for(const auto& b : bundles) if(b.get_id() == bundle_id) { target_bundle = &b; break; }
-    if (!target_bundle) return false;
-
-    // Составляем список кандидатов (якорей):
+// Поиск кандидатов для размещения (Anchors)
+std::vector<int> GeneticAlgorithmSolver::find_potential_anchors(const Individual& ind, const Bundle* bundle, std::mt19937& rng) {
     std::vector<int> potential_anchors;
     
-    // Оптимизированная проверка на пустоту (перебор вектора O(N), но это один раз)
-    // Можно хранить счетчик занятых узлов в Individual, но пока так:
+    // Оптимизированная проверка на пустоту
     bool is_empty = true;
     for(char occupied : ind.occupied_nodes) {
         if(occupied) { is_empty = false; break; }
@@ -40,117 +33,130 @@ bool GeneticAlgorithmSolver::try_add_bundle(Individual& ind, int bundle_id, std:
     if (is_empty) {
         std::uniform_int_distribution<> d(0, graph->size()-1);
         potential_anchors.push_back(d(rng));
-    } else {
-        // Ищем соседей занятых клеток
-        // O(N) проход вместо итерации по сету, но зато без аллокаций
-        std::vector<int> neighbors;
-        neighbors.reserve(graph->size() / 10); 
+        return potential_anchors;
+    } 
+    
+    // Ищем соседей занятых клеток
+    std::vector<int> neighbors;
+    neighbors.reserve(graph->size() / 10); 
+    std::set<int> visited_neighbors; 
 
-        // Чтобы не сканировать весь вектор, можно было бы хранить список занятых ID отдельно,
-        // но для простоты пройдемся по тем фигурам, что уже есть
-        std::set<int> visited_neighbors; // Чтобы избежать дублей
-
-        for(const auto& [bid, shapes] : ind.active_bundles) {
-            for(const auto& shape : shapes) {
-                for(int nid : shape.footprint) {
-                    const auto& node = graph->get_node(nid);
-                    for(int neighbor_id : node.get_all_neighbors()) {
-                        if(neighbor_id != -1 && !ind.occupied_nodes[neighbor_id] && visited_neighbors.find(neighbor_id) == visited_neighbors.end()) {
-                            neighbors.push_back(neighbor_id);
-                            visited_neighbors.insert(neighbor_id);
-                        }
+    for(const auto& [bid, shapes] : ind.active_bundles) {
+        for(const auto& shape : shapes) {
+            for(int nid : shape.footprint) {
+                const auto& node = graph->get_node(nid);
+                for(int neighbor_id : node.get_all_neighbors()) {
+                    if(neighbor_id != -1 && !ind.occupied_nodes[neighbor_id] && visited_neighbors.find(neighbor_id) == visited_neighbors.end()) {
+                        neighbors.push_back(neighbor_id);
+                        visited_neighbors.insert(neighbor_id);
                     }
                 }
             }
-        }
-        
-        if (neighbors.empty()) {
-             // Если вдруг все зажато или ошибка - пробуем рандом
-             std::uniform_int_distribution<> d(0, graph->size()-1);
-             potential_anchors.push_back(d(rng));
-        } else {
-            potential_anchors = std::move(neighbors);
-            std::shuffle(potential_anchors.begin(), potential_anchors.end(), rng);
-             // Добавляем немного шума
-            std::uniform_int_distribution<> d(0, graph->size()-1);
-            for(int i=0; i<3; ++i) potential_anchors.push_back(d(rng));
         }
     }
     
+    if (neighbors.empty()) {
+            // Если вдруг все зажато или ошибка - пробуем рандом
+            std::uniform_int_distribution<> d(0, graph->size()-1);
+            potential_anchors.push_back(d(rng));
+    } else {
+        potential_anchors = std::move(neighbors);
+        std::shuffle(potential_anchors.begin(), potential_anchors.end(), rng);
+            // Добавляем немного шума
+        std::uniform_int_distribution<> d(0, graph->size()-1);
+        for(int i=0; i<3; ++i) potential_anchors.push_back(d(rng));
+    }
+    
     if(potential_anchors.size() > 50) potential_anchors.resize(50);
+    return potential_anchors;
+}
 
-    // Пытаемся разместить
+// Попытка разместить фигуры бандла, начиная с определенного якоря
+bool GeneticAlgorithmSolver::try_place_shapes_at_anchor(Individual& ind, const Bundle* target_bundle, int anchor_candidate, std::mt19937& rng) {
     std::vector<PlacedShape> new_shapes;
     std::vector<char> temp_occupied = ind.occupied_nodes; // Копия вектора (быстро для char)
+    
+    bool possible = true;
 
-    for(int anchor_candidate : potential_anchors) {
-        new_shapes.clear();
-        bool possible = true;
-        temp_occupied = ind.occupied_nodes; // Reset
-
-        for(const auto& shape : target_bundle->get_shapes()) {
-            std::uniform_int_distribution<> rot_dist(0, graph->get_max_ports()-1);
+    for(const auto& shape : target_bundle->get_shapes()) {
+        std::uniform_int_distribution<> rot_dist(0, graph->get_max_ports()-1);
+        
+        bool placed_this = false;
+        // Пробуем все повороты
+        for(int r=0; r<graph->get_max_ports(); ++r) {
+            int current_anchor = (new_shapes.empty()) ? anchor_candidate : -1;
             
-            bool placed_this = false;
-            // Пробуем все повороты
-            for(int r=0; r<graph->get_max_ports(); ++r) {
-                int current_anchor = (new_shapes.empty()) ? anchor_candidate : -1;
-                
-                // Если это не первая фигура бандла, ищем место рядом с только что поставленными
-                if (current_anchor == -1) {
-                    std::vector<int> local_anchors;
-                    for(const auto& ps : new_shapes) {
-                        for(int nid : ps.footprint) {
-                             const auto& node = graph->get_node(nid);
-                             for(int n : node.get_all_neighbors()) {
-                                 if(n!=-1 && !temp_occupied[n]) { // O(1) check
-                                     local_anchors.push_back(n);
-                                 }
-                             }
-                        }
+            // Если это не первая фигура бандла, ищем место рядом с только что поставленными
+            if (current_anchor == -1) {
+                std::vector<int> local_anchors;
+                for(const auto& ps : new_shapes) {
+                    for(int nid : ps.footprint) {
+                            const auto& node = graph->get_node(nid);
+                            for(int n : node.get_all_neighbors()) {
+                                if(n!=-1 && !temp_occupied[n]) { // O(1) check
+                                    local_anchors.push_back(n);
+                                }
+                            }
                     }
-                     if(!local_anchors.empty()) {
-                         std::uniform_int_distribution<> d(0, local_anchors.size()-1);
-                         current_anchor = local_anchors[d(rng)];
-                     } else {
-                         std::uniform_int_distribution<> d(0, graph->size()-1);
-                         current_anchor = d(rng);
-                     }
                 }
-                
-                int rot = (r + rot_dist(rng)) % graph->get_max_ports();
-                auto fp = get_embedding(graph, current_anchor, shape, rot);
-                
-                if (fp.empty()) continue;
-
-                bool collision = false;
-                // FAST COLLISION CHECK O(K) where K is shape size
-                for(int nid : fp) {
-                    if(temp_occupied[nid]) { collision = true; break; }
-                }
-                
-                if (!collision) {
-                    PlacedShape ps;
-                    ps.anchor_id = current_anchor;
-                    ps.rotation = rot;
-                    ps.figure = shape;
-                    ps.footprint = fp;
-                    new_shapes.push_back(ps);
-                    for(int nid : fp) temp_occupied[nid] = 1; // Mark as occupied
-                    placed_this = true;
-                    break;
-                }
+                    if(!local_anchors.empty()) {
+                        std::uniform_int_distribution<> d(0, local_anchors.size()-1);
+                        current_anchor = local_anchors[d(rng)];
+                    } else {
+                        std::uniform_int_distribution<> d(0, graph->size()-1);
+                        current_anchor = d(rng);
+                    }
             }
             
-            if (!placed_this) {
-                possible = false;
+            int rot = (r + rot_dist(rng)) % graph->get_max_ports();
+            auto fp = get_embedding(graph, current_anchor, shape, rot);
+            
+            if (fp.empty()) continue;
+
+            bool collision = false;
+            // FAST COLLISION CHECK O(K) where K is shape size
+            for(int nid : fp) {
+                if(temp_occupied[nid]) { collision = true; break; }
+            }
+            
+            if (!collision) {
+                PlacedShape ps;
+                ps.anchor_id = current_anchor;
+                ps.rotation = rot;
+                ps.figure = shape;
+                ps.footprint = fp;
+                new_shapes.push_back(ps);
+                for(int nid : fp) temp_occupied[nid] = 1; // Mark as occupied
+                placed_this = true;
                 break;
             }
         }
+        
+        if (!placed_this) {
+            possible = false;
+            break;
+        }
+    }
 
-        if (possible) {
-            ind.active_bundles[bundle_id] = new_shapes;
-            ind.occupied_nodes = temp_occupied;
+    if (possible) {
+        ind.active_bundles[target_bundle->get_id()] = new_shapes;
+        ind.occupied_nodes = temp_occupied;
+        return true;
+    }
+    
+    return false;
+}
+
+// Попытка добавить бандл в особь с использованием "Sticky Heuristic"
+bool GeneticAlgorithmSolver::try_add_bundle(Individual& ind, int bundle_id, std::mt19937& rng) {
+    const Bundle* target_bundle = nullptr;
+    for(const auto& b : bundles) if(b.get_id() == bundle_id) { target_bundle = &b; break; }
+    if (!target_bundle) return false;
+
+    auto potential_anchors = find_potential_anchors(ind, target_bundle, rng);
+
+    for(int anchor_candidate : potential_anchors) {
+        if (try_place_shapes_at_anchor(ind, target_bundle, anchor_candidate, rng)) {
             return true;
         }
     }
@@ -267,19 +273,21 @@ void GeneticAlgorithmSolver::mutate(Individual& ind, std::mt19937& rng) {
 }
 
 float GeneticAlgorithmSolver::solve() {
-    std::cout << "GA: Starting Genetic Algorithm (" << generations << " gens, pop=" << population_size << ")..." << std::endl;
+    if (config.verbose) {
+        std::cout << "GA: Starting Genetic Algorithm (" << config.ga_generations << " gens, pop=" << config.ga_population_size << ")..." << std::endl;
+    }
     
     std::random_device rd;
     std::mt19937 rng(rd());
     
     std::vector<Individual> population;
-    for(int i=0; i<population_size; ++i) {
+    for(int i=0; i<config.ga_population_size; ++i) {
         population.push_back(create_random_individual(rng));
     }
     
     Individual best_ever = population[0];
     
-    for(int gen=0; gen<generations; ++gen) {
+    for(int gen=0; gen<config.ga_generations; ++gen) {
         std::sort(population.begin(), population.end(), [](const Individual& a, const Individual& b){
             return a.fitness > b.fitness;
         });
@@ -288,17 +296,17 @@ float GeneticAlgorithmSolver::solve() {
             best_ever = population[0];
         }
         
-        if (gen % 10 == 0) {
+        if (config.verbose && gen % 10 == 0) {
             std::cout << "Gen " << gen << " | Best Fitness: " << best_ever.fitness << "\r" << std::flush;
         }
         
         std::vector<Individual> new_pop;
         
-        for(int i=0; i<elite_count && i < population.size(); ++i) {
+        for(int i=0; i<config.ga_elite_count && i < population.size(); ++i) {
             new_pop.push_back(population[i]);
         }
         
-        while(new_pop.size() < population_size) {
+        while(new_pop.size() < config.ga_population_size) {
             int t_size = 3;
             Individual p1, p2;
             
@@ -317,7 +325,7 @@ float GeneticAlgorithmSolver::solve() {
             }
             
             Individual child = crossover(p1, p2, rng);
-            if (std::uniform_real_distribution<>(0, 1)(rng) < mutation_rate) {
+            if (std::uniform_real_distribution<>(0, 1)(rng) < config.ga_mutation_rate) {
                 mutate(child, rng);
             }
             new_pop.push_back(child);
@@ -326,7 +334,9 @@ float GeneticAlgorithmSolver::solve() {
         population = new_pop;
     }
     
-    std::cout << "\nGA Finished." << std::endl;
+    if (config.verbose) {
+        std::cout << "\nGA Finished." << std::endl;
+    }
     
     int fig_uid = 0;
     for(const auto& [bid, shapes] : best_ever.active_bundles) {

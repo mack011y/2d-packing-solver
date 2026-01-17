@@ -135,7 +135,7 @@ float GRASPSolver::run_construction_phase(SolutionState& state) {
         std::set<int> temp_occupied = occupied_nodes;
         
         // Пытаемся разместить бандл целиком
-        bool success = place_shapes_recursive(0, bundle.get_shapes(), graph, temp_occupied, final_placements, g, alpha);
+        bool success = place_shapes_recursive(0, bundle.get_shapes(), graph, temp_occupied, final_placements, g, config.grasp_alpha);
         
         if (success) {
             for(const auto& p : final_placements) {
@@ -159,10 +159,12 @@ float GRASPSolver::solve() {
     float best_score = -1.0f;
     SolutionState best_state;
     
-    std::cout << "GRASP: Starting " << max_iterations << " iterations..." << std::endl;
+    if (config.verbose) {
+        std::cout << "GRASP: Starting " << config.grasp_max_iterations << " iterations..." << std::endl;
+    }
     
     // Многократный запуск фазы построения
-    for(int i=0; i<max_iterations; ++i) {
+    for(int i=0; i<config.grasp_max_iterations; ++i) {
         SolutionState current_state;
         float score = run_construction_phase(current_state);
         
