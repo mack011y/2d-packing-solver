@@ -20,13 +20,8 @@ include_directories(include)
 # Common sources
 set(COMMON_SOURCES
     "src/generators.cpp"
-    "src/solvers_common.cpp"
-    "src/solvers_dlx.cpp"
+    "src/core.cpp"
     "src/solvers_grasp.cpp"
-    "src/solvers_sa.cpp"
-    "src/solvers_ga.cpp"
-    "src/solvers_ga_perm.cpp"
-    "src/heuristics.cpp"
 )
 
 # 1. Console Solver Tool
@@ -49,9 +44,3 @@ target_link_libraries(solver_viewer PRIVATE
     SFML::System
 )
 
-# 3. Debug Tool
-add_executable(debug_tool 
-    src/debug_main.cpp 
-    ${COMMON_SOURCES}
-)
-target_link_libraries(debug_tool PRIVATE nlohmann_json::nlohmann_json)

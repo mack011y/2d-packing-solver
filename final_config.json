@@ -1,0 +1,10 @@
+{
+    "grid_type": 1,
+    "width": 20,
+    "height": 20,
+    "min_shape_size": 3,
+    "max_shape_size": 6,
+    "min_bundle_area": 15,
+    "max_bundle_area": 30,
+    "seed": 1
+}

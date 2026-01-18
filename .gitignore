@@ -2,6 +2,10 @@
 build/
 bin/
 lib/
+CMakeFiles/
+_deps/
+CMakeCache.txt
+cmake_install.cmake
 
 # IDE settings
 .vscode/
@@ -16,6 +20,14 @@ Thumbs.db
 
 # Executables
 solver_app
+solver_cli
+solver_viewer
+debug_tool
 *.o
 *.a
 *.dylib
+
+# Logs and generated files
+*.log
+*.json
+!final_config.json

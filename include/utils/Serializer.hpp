@@ -29,9 +29,11 @@ public:
         return j_nodes;
     }
 
-    // Сохранение состояния задачи (сетка + бандлы) в JSON файл
-    static void save_json(const std::string& filename, std::shared_ptr<Grid> grid, const std::vector<Bundle>& bundles) {
+    // Сохранение задачи (Puzzle) в JSON файл
+    static void save(const Puzzle& puzzle, const std::string& filename) {
         json j;
+        auto grid = puzzle.get_grid();
+        const auto& bundles = puzzle.get_bundles();
         
         // 1. Информация о сетке
         j["grid"] = {
@@ -53,8 +55,8 @@ public:
                 {"id", node.get_id()},
                 {"x", node.get_data().x},
                 {"y", node.get_data().y},
-                {"bundle_id", node.get_data().bundle_id}, // ID бандла, если клетка занята
-                {"figure_id", node.get_data().figure_id}, // ID конкретной фигуры
+                {"bundle_id", node.get_data().bundle_id}, 
+                {"figure_id", node.get_data().figure_id}, 
                 {"ports", ports}
             });
         }
@@ -74,7 +76,6 @@ public:
                 j_s["name"] = s->name;
                 j_s["size"] = s->size();
                 j_s["max_ports"] = s->get_max_ports();
-                // Сериализуем топологию самой фигуры (важно для сложных форм)
                 j_s["topology"] = serialize_graph_topology(*s);
                 j_shapes.push_back(j_s);
             }
@@ -86,19 +87,20 @@ public:
 
         std::ofstream out(filename);
         if (out.is_open()) {
-            out << j.dump(4); // Красивый вывод с отступами
+            out << j.dump(4);
             std::cout << "Data saved to " << filename << std::endl;
         } else {
             std::cerr << "Failed to open output file: " << filename << std::endl;
         }
     }
 
-    // Загрузка состояния задачи из JSON файла
-    static std::pair<std::shared_ptr<Grid>, std::vector<Bundle>> load_json(const std::string& filename) {
+    // Загрузка задачи (Puzzle) из JSON файла
+    static Puzzle load(const std::string& filename) {
         std::ifstream in(filename);
         if (!in.is_open()) {
             std::cerr << "Failed to open input file: " << filename << std::endl;
-            return {nullptr, {}};
+            // Возвращаем пустой пазл
+            return Puzzle(std::make_shared<Grid>(0, 0, GridType::SQUARE), std::vector<Bundle>{});
         }
 
         json j;
@@ -130,7 +132,6 @@ public:
                     }
                 }
             } else if (cell.contains("neighbors")) {
-                // Поддержка старого формата (на всякий случай)
                 int p = 0;
                 for(int v : cell["neighbors"]) {
                     grid->add_directed_edge(u, v, p++); 
@@ -157,11 +158,9 @@ public:
                         auto fig = std::make_shared<Figure>(name, mp);
                         
                         if(s_json.contains("topology")) {
-                            // Создаем узлы фигуры
                             for(const auto& node_json : s_json["topology"]) {
-                                fig->add_node(); // ID авто-инкрементируется: 0, 1, 2...
+                                fig->add_node(); 
                             }
-                            // Восстанавливаем связи внутри фигуры
                             for(const auto& node_json : s_json["topology"]) {
                                 int u = node_json["id"];
                                 const auto& ports = node_json["ports"];
@@ -182,6 +181,10 @@ public:
             }
         }
 
-        return {grid, bundles};
+        return Puzzle(grid, bundles, filename);
+    }
+    
+    static void save_json(const std::string& filename, std::shared_ptr<Grid> grid, const std::vector<Bundle>& bundles) {
+        save(Puzzle(grid, bundles), filename);
     }
 };

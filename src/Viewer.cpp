@@ -1,90 +1,53 @@
 #include "Viewer.hpp"
 #include "utils/Serializer.hpp"
+#include "utils/ColorUtils.hpp"
 #include <cmath>
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
 #include <iomanip>
 #include <filesystem>
+#include <optional>
 
 Viewer::Viewer() {
     sf::ContextSettings settings;
-    settings.antiAliasingLevel = 8; // Сглаживание для красивых линий
+    settings.antiAliasingLevel = 8;
     
-    // Запускаем в оконном режиме для стабильности
-    // sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
-    // window.create(desktop, "Puzzle Viewer", sf::Style::None, sf::State::Fullscreen, settings);
-    
-    window.create(sf::VideoMode({1280, 800}), "Puzzle Viewer", sf::Style::Default, sf::State::Windowed, settings);
+    window.create(sf::VideoMode({1280, 800}), "CLEAN VIEWER", sf::Style::Default, sf::State::Windowed, settings);
     
     window.setFramerateLimit(60);
     
-    // Генерируем текстуры в памяти (штриховка)
-    createHatchTextures();
-    
     view = window.getDefaultView();
-    
-    // Попытка загрузить системный шрифт
-    const std::vector<std::string> fontPaths = {
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/System/Library/Fonts/Arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "arial.ttf"
-    };
-
-    fontLoaded = false;
-    for (const auto& path : fontPaths) {
-        if (std::filesystem::exists(path) && font.openFromFile(path)) {
-            fontLoaded = true;
-            std::cout << "Loaded font: " << path << std::endl;
-            break;
-        }
-    }
-    
-    if (!fontLoaded) {
-        std::cerr << "Warning: No font found. Text will not be displayed." << std::endl;
-    }
 }
 
-// Создаем текстуру штриховки программно (черные диагональные полосы)
-// Это позволяет не зависеть от внешних файлов картинок.
-void Viewer::createHatchTextures() {
-    sf::Image img(sf::Vector2u(16, 16), sf::Color::Transparent);
-    sf::Color hatchColor(0, 0, 0, 200); // Полупрозрачный черный
-    
-    for(unsigned int y=0; y<16; ++y) {
-        for(unsigned int x=0; x<16; ++x) {
-            // Рисуем диагональ: x + y
-            if ((x + y) % 8 == 0 || (x + y) % 8 == 1) { 
-                img.setPixel(sf::Vector2u(x, y), hatchColor);
-            }
-        }
-    }
-    hatchTexture.loadFromImage(img);
-    hatchTexture.setRepeated(true); // Текстура будет повторяться (тайлинг)
-    hatchTexture.setSmooth(true);
-}
-
-void Viewer::run(const std::string& filename) {
+int Viewer::run(const std::string& filename) {
     if (!loadData(filename)) {
-        std::cerr << "Press Enter to exit..." << std::endl;
-        std::cin.get();
-        return;
+        std::cerr << "Failed to load data: " << filename << std::endl;
+        return 1;
     }
     
     while (window.isOpen()) {
-        handleEvents();
-        render();
+        if (!handleEvents()) break;
+        if (!render()) {
+            std::cerr << "Render error" << std::endl;
+            break;
+        }
     }
+    return 0;
 }
 
 bool Viewer::loadData(const std::string& filename) {
     std::cout << "Loading " << filename << "..." << std::endl;
     try {
-        auto result = Serializer::load_json(filename);
+        if (!std::filesystem::exists(filename)) {
+            std::cerr << "File not found: " << filename << std::endl;
+            return false;
+        }
+
+        auto puzzle = Serializer::load(filename);
         std::cout << "JSON parse complete." << std::endl;
-        grid = result.first;
-        bundles = result.second;
+        grid = puzzle.get_grid();
+        bundles = puzzle.get_bundles();
         
         if (!grid) {
             std::cerr << "Error loading grid!" << std::endl;
@@ -92,16 +55,12 @@ bool Viewer::loadData(const std::string& filename) {
         }
         std::cout << "Grid loaded: " << grid->get_width() << "x" << grid->get_height() << std::endl;
         
-        // Кэшируем цвета бандлов для скорости отрисовки
         for(const auto& b : bundles) {
             bundleColors[b.get_id()] = sf::Color(b.get_color().r, b.get_color().g, b.get_color().b);
         }
         
-        // --- Логика Авто-Зума (Auto-Fit) ---
-        // Находим границы сетки в мировых координатах и подстраиваем камеру
         float minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
         
-        // Берем 4 угла сетки (достаточно для прямоугольника/гексагона)
         std::vector<sf::Vector2i> corners = {
             {0, 0}, 
             {grid->get_width()-1, 0}, 
@@ -131,18 +90,17 @@ bool Viewer::loadData(const std::string& filename) {
         
         float zoomFactor = 1.0f;
         if (gridRatio > winRatio) {
-            // Сетка шире экрана
             float visibleW = gridW + padding * 2.0f;
             zoomFactor = visibleW / (float)winSize.x;
         } else {
-            // Сетка выше экрана
             float visibleH = gridH + padding * 2.0f;
             zoomFactor = visibleH / (float)winSize.y;
         }
-        zoomFactor *= 1.2f; // Немного отдаляем
+        zoomFactor *= 1.2f;
         
         view.setSize({(float)winSize.x * zoomFactor, (float)winSize.y * zoomFactor});
-        std::cout << "Auto-fit complete." << std::endl;
+        std::cout << "Auto-fit complete. Zoom: " << zoomFactor 
+                  << " Bounds: [" << minX << "," << minY << "] -> [" << maxX << "," << maxY << "]" << std::endl;
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Exception loading data: " << e.what() << std::endl;
@@ -150,25 +108,24 @@ bool Viewer::loadData(const std::string& filename) {
     }
 }
 
-void Viewer::handleEvents() {
+bool Viewer::handleEvents() {
     while (const std::optional event = window.pollEvent()) {
         if (event->is<sf::Event::Closed>()) {
             window.close();
+            return false;
         }
         else if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
-            // Выход по Esc или Q
-            if (keyPressed->scancode == sf::Keyboard::Scancode::Escape || 
-                keyPressed->scancode == sf::Keyboard::Scancode::Q)
+            if (keyPressed->code == sf::Keyboard::Key::Escape || 
+                keyPressed->code == sf::Keyboard::Key::Q) {
                 window.close();
+                return false;
+            }
         }
         else if (const auto* mouseMoved = event->getIf<sf::Event::MouseMoved>()) {
-            // Преобразуем координаты мыши (экран) в мировые координаты (с учетом зума)
             sf::Vector2f worldPos = window.mapPixelToCoords(mouseMoved->position, view);
             hoveredNodeId = -1;
             
             if (grid) {
-                // ОПТИМИЗАЦИЯ: O(1) поиск вместо перебора всех узлов O(N)
-                // Вычисляем индексы сетки математически
                 int gx = -1, gy = -1;
                 
                 if (grid->get_type() == GridType::SQUARE) {
@@ -176,7 +133,6 @@ void Viewer::handleEvents() {
                      gy = std::round(worldPos.y / cellSize);
                 } 
                 else if (grid->get_type() == GridType::HEXAGON) {
-                    // Аппроксимация для гексов
                     float size = cellSize;
                     float x_spacing = std::sqrt(3.0f) * size;
                     float y_spacing = 1.5f * size;
@@ -186,15 +142,12 @@ void Viewer::handleEvents() {
                     gx = std::round((worldPos.x - offset) / x_spacing);
                 }
                 else if (grid->get_type() == GridType::TRIANGLE) {
-                    // Аппроксимация для треугольников
                     float size = cellSize;
                     float h = size * std::sqrt(3.0f) / 2.0f;
                     gx = std::floor(worldPos.x / (size / 2.0f)); 
                     gy = std::round(worldPos.y / h);
                 }
 
-                // Так как математика дает приблизительный индекс, проверяем соседей (3x3),
-                // чтобы найти ближайший реальный узел (особенно важно для гексов и треугольников)
                 float minDist = cellSize * 0.8f;
                 
                 for(int dy = -1; dy <= 1; ++dy) {
@@ -205,13 +158,11 @@ void Viewer::handleEvents() {
                          int nid = grid->get_node_id_at(nx, ny);
                          if (nid != -1) {
                              sf::Vector2f pos = getNodePosition(nx, ny, grid->get_type());
-                             // Центрируем точку (позиция узла - это левый верхний угол для квадратов)
                              float cx = pos.x, cy = pos.y;
                              
                              if (grid->get_type() == GridType::SQUARE) {
                                   cx += cellSize/2; cy += cellSize/2;
                              } else if (grid->get_type() == GridType::TRIANGLE) {
-                                  // Для треугольников центр зависит от ориентации
                                   bool is_up = ((nx + ny) % 2 == 0);
                                   float size = cellSize;
                                   float h = size * std::sqrt(3.0f) / 2.0f;
@@ -230,26 +181,21 @@ void Viewer::handleEvents() {
             }
         }
     }
+    return true;
 }
 
-void Viewer::render() {
-    window.clear(sf::Color(30, 30, 35)); // Темно-серый фон
+bool Viewer::render() {
+    window.clear(sf::Color(30, 30, 35));
     
-    // Рисуем игровой мир с камерой
     window.setView(view);
     if (grid) {
-        drawGrid();
+        if (!drawGrid()) return false;
     }
     
-    // Рисуем интерфейс (HUD) поверх всего, без камеры
-    window.setView(window.getDefaultView());
-    drawOverlay();
-    drawLegend();
-    
     window.display();
+    return true;
 }
 
-// Конвертация координат сетки в экранные координаты
 sf::Vector2f Viewer::getNodePosition(int x, int y, GridType type) {
     float offsetX = 0; float offsetY = 0;
     
@@ -264,7 +210,6 @@ sf::Vector2f Viewer::getNodePosition(int x, int y, GridType type) {
         
         float px = offsetX + x * x_spacing;
         float py = offsetY + y * y_spacing;
-        // Смещаем нечетные ряды
         if (y % 2 != 0) px += x_spacing / 2.0f;
         return {px, py};
     }
@@ -278,27 +223,25 @@ sf::Vector2f Viewer::getNodePosition(int x, int y, GridType type) {
     return {0,0};
 }
 
-void Viewer::drawGrid() {
-    // Определяем бандл под курсором
+bool Viewer::drawGrid() {
     int hoveredBundleId = -1;
     if (hoveredNodeId != -1 && grid) {
         hoveredBundleId = grid->get_node(hoveredNodeId).get_data().bundle_id;
     }
 
-    sf::Color gridLineColor(20, 20, 20); 
-    float outlineThick = -1.0f; // Отрицательная толщина = обводка внутрь
+    sf::Color gridLineColor(100, 100, 100); 
+    float outlineThick = 1.0f; 
 
     for (auto const& node : grid->get_nodes()) {
         int bid = node.get_data().bundle_id;
         
-        sf::Color cellColor = sf::Color(60, 60, 60); // Цвет пустой клетки
+        sf::Color cellColor = sf::Color(60, 60, 60);
         if (bid != -1 && bundleColors.count(bid)) {
             cellColor = bundleColors[bid];
         }
 
         sf::Vector2f pos = getNodePosition(node.get_data().x, node.get_data().y, grid->get_type());
 
-        // --- Отрисовка Квадратов ---
         if (grid->get_type() == GridType::SQUARE) {
             sf::RectangleShape rect(sf::Vector2f(cellSize, cellSize));
             rect.setPosition(pos);
@@ -308,17 +251,13 @@ void Viewer::drawGrid() {
             
             window.draw(rect);
 
-            // Подсветка штриховкой при наведении
             if (bid == hoveredBundleId && bid != -1) {
-                rect.setFillColor(sf::Color::White); 
-                rect.setTexture(&hatchTexture); 
-                // Трюк: используем координаты узла для смещения текстуры, чтобы штриховка была непрерывной
-                sf::IntRect texRect({(int)pos.x, (int)pos.y}, {(int)cellSize, (int)cellSize}); 
-                rect.setTextureRect(texRect);
+                rect.setFillColor(sf::Color(255, 255, 255, 100)); 
+                rect.setOutlineColor(sf::Color::White);
+                rect.setOutlineThickness(2.0f);
                 window.draw(rect);
             }
         }
-        // --- Отрисовка Гексагонов ---
         else if (grid->get_type() == GridType::HEXAGON) {
             float drawRadius = cellSize; 
             sf::ConvexShape hex(6);
@@ -334,14 +273,12 @@ void Viewer::drawGrid() {
             window.draw(hex);
             
             if (bid == hoveredBundleId && bid != -1) {
-                hex.setFillColor(sf::Color::White);
-                hex.setTexture(&hatchTexture);
-                sf::FloatRect b = hex.getGlobalBounds();
-                hex.setTextureRect(sf::IntRect({(int)b.position.x, (int)b.position.y}, {(int)b.size.x, (int)b.size.y}));
+                hex.setFillColor(sf::Color(255, 255, 255, 100));
+                hex.setOutlineColor(sf::Color::White);
+                hex.setOutlineThickness(2.0f);
                 window.draw(hex);
             }
         }
-        // --- Отрисовка Треугольников ---
         else if (grid->get_type() == GridType::TRIANGLE) {
             sf::ConvexShape tri(3);
             bool is_up = ((node.get_data().x + node.get_data().y) % 2 == 0);
@@ -366,104 +303,12 @@ void Viewer::drawGrid() {
             window.draw(tri);
             
             if (bid == hoveredBundleId && bid != -1) {
-                tri.setFillColor(sf::Color::White);
-                tri.setTexture(&hatchTexture);
-                sf::FloatRect b = tri.getGlobalBounds();
-                tri.setTextureRect(sf::IntRect({(int)b.position.x, (int)b.position.y}, {(int)b.size.x, (int)b.size.y}));
+                tri.setFillColor(sf::Color(255, 255, 255, 100));
+                tri.setOutlineColor(sf::Color::White);
+                tri.setOutlineThickness(2.0f);
                 window.draw(tri);
             }
         }
     }
-}
-
-void Viewer::drawOverlay() {
-    if (!fontLoaded) return;
-    
-    sf::Text t(font);
-    t.setCharacterSize(14);
-    t.setFillColor(sf::Color::White);
-    t.setPosition({10, 10});
-    
-    std::string info = "Viewer: Optimized Mode";
-    
-    if (hoveredNodeId != -1 && grid) {
-        auto& data = grid->get_node(hoveredNodeId).get_data();
-        info += "\nBundle ID: " + std::to_string(data.bundle_id);
-        info += "\nCoords: (" + std::to_string(data.x) + ", " + std::to_string(data.y) + ")";
-    }
-    
-    t.setString(info);
-    
-    sf::FloatRect bounds = t.getGlobalBounds();
-    // Полупрозрачная подложка под текст
-    sf::RectangleShape bg(sf::Vector2f(bounds.size.x + 20, bounds.size.y + 20));
-    bg.setPosition({5, 5});
-    bg.setFillColor(sf::Color(0, 0, 0, 150));
-    window.draw(bg);
-    window.draw(t);
-}
-
-void Viewer::drawLegend() {
-    if (!fontLoaded) return;
-    
-    float width = 300.0f;
-    float height = 20.0f;
-    sf::Vector2u winSize = window.getSize();
-    float x = (winSize.x - width) / 2.0f;
-    float y = winSize.y - 40.0f;
-    
-    // Рисуем градиентную полосу радуги
-    int segments = 30; 
-    sf::VertexArray gradient(sf::PrimitiveType::TriangleStrip, (segments + 1) * 2);
-    
-    for(int i=0; i <= segments; ++i) {
-        float t = (float)i / (float)segments;
-        float px = x + t * width;
-        
-        // H: 240 (Blue) -> 0 (Red)
-        float h = (1.0f - t) * (240.0f / 360.0f);
-        
-        // Локальная конвертация HSV -> RGB (копия логики из генератора)
-        int r, g, b;
-        float s = 0.85f, v = 0.95f; 
-        int ii = int(h * 6);
-        float f = h * 6 - ii;
-        float p = v * (1 - s);
-        float q = v * (1 - f * s);
-        float tt = v * (1 - (1 - f) * s);
-        float rf, gf, bf;
-        switch (ii % 6) {
-            case 0: rf = v; gf = tt; bf = p; break;
-            case 1: rf = q; gf = v; bf = p; break;
-            case 2: rf = p; gf = v; bf = tt; break;
-            case 3: rf = p; gf = q; bf = v; break;
-            case 4: rf = tt; gf = p; bf = v; break;
-            case 5: rf = v; gf = p; bf = q; break;
-            default: rf=0; gf=0; bf=0; break;
-        }
-        r = int(rf * 255); g = int(gf * 255); b = int(bf * 255);
-        
-        gradient[i*2].position = {px, y};
-        gradient[i*2].color = sf::Color(r, g, b);
-        
-        gradient[i*2+1].position = {px, y + height};
-        gradient[i*2+1].color = sf::Color(r, g, b);
-    }
-    
-    window.draw(gradient);
-    
-    sf::Text textMin(font), textMax(font);
-    textMin.setCharacterSize(14); textMax.setCharacterSize(14);
-    textMin.setFillColor(sf::Color::White); textMax.setFillColor(sf::Color::White);
-    
-    textMin.setString("Small Area");
-    textMax.setString("Big Area");
-    
-    sf::FloatRect bMin = textMin.getLocalBounds();
-    
-    textMin.setPosition({x - bMin.size.x - 10, y});
-    textMax.setPosition({x + width + 10, y});
-    
-    window.draw(textMin);
-    window.draw(textMax);
+    return true;
 }

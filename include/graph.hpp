@@ -1,25 +1,28 @@
 #pragma once
 #include <vector>
+#include <array>
 #include <stdexcept>
 #include <iostream>
 
-// --- Базовая архитектура Графа ---
+static constexpr int MAX_PORTS_CAPACITY = 6;
 
 // Узел графа
-// T - тип данных, хранящихся в узле (например, координаты или информация о фигуре)
 template <typename T>
 class Node {
 private:
-    int id;                      // Уникальный идентификатор узла (0, 1, 2...)
-    std::vector<int> neighbors;  // Список смежности (хранит ID соседей для каждого "порта")
-    T data;                      // Полезная нагрузка узла
+    int id;                                         
+    std::array<int, MAX_PORTS_CAPACITY> neighbors;  
+    T data;                                         
 
 public:
-    Node() : id(-1), neighbors() {}
+    Node() : id(-1) {
+        neighbors.fill(-1);
+    }
 
-    Node(int id, int max_ports, const T& initial_data = T()) 
+    Node(int id, const T& initial_data = T()) 
         : id(id), data(initial_data) {
-        neighbors.resize(max_ports, -1); // -1 означает отсутствие связи (пустой порт)
+    
+        neighbors.fill(-1); // -1 означает отсутствие связи (пустой порт)
     }
 
     int get_id() const { return id; }
@@ -29,68 +32,69 @@ public:
     void set_data(const T& d) { data = d; }
 
     // Установить соседа на определенный порт (направление)
-    void set_neighbor(int port, int neighbor_id) {
-        if (port >= 0 && port < (int)neighbors.size()) {
+    bool set_neighbor(size_t port, int neighbor_id) {
+        if (port < MAX_PORTS_CAPACITY) {
             neighbors[port] = neighbor_id;
+            return true;
         }
+        return false;
     }
 
-    // Получить ID соседа на определенном порту
-    // Возвращает -1, если соседа нет или порт некорректен
-    int get_neighbor(int port) const {
-        if (port >= 0 && port < (int)neighbors.size()) {
+    // Получить ID соседа на определенном порту, вернем -1 если соседа нет/некоректный порт
+    int get_neighbor(size_t port) const {
+        if (port < MAX_PORTS_CAPACITY) {
             return neighbors[port];
         }
         return -1;
     }
 
-    const std::vector<int>& get_all_neighbors() const { return neighbors; }
+    const std::array<int, MAX_PORTS_CAPACITY>& get_all_neighbors() const { 
+        return neighbors; 
+    }
 };
 
 // Базовый класс Графа
-// T - тип данных в узлах
 template <typename T>
 class Graph {
 protected:
-    int max_ports;              // Максимальное количество портов у каждого узла
-    std::vector<Node<T>> nodes; // Хранилище всех узлов графа
+    size_t max_ports;              // Максимальное количество портов у каждого узла
+    std::vector<Node<T>> nodes;    // Хранилище всех узлов графа
 
 public:
-    explicit Graph(int mp) : max_ports(mp) {}
+    explicit Graph(size_t mp) : max_ports(mp) {}
     virtual ~Graph() = default;
 
-    int get_max_ports() const { return max_ports; }
+    size_t get_max_ports() const { return max_ports; }
+    
     size_t size() const { return nodes.size(); }
 
-    // Добавление нового узла в граф
-    // Возвращает ID созданного узла
+    // Добавление нового узла в граф, вернем ID созданного узла
     int add_node(const T& initial_data = T()) {
-        int id = (int)nodes.size();
-        nodes.emplace_back(id, max_ports, initial_data);
+        int id = static_cast<int>(nodes.size());
+        nodes.emplace_back(id, initial_data);
         return id;
     }
 
     // Добавление направленного ребра от u к v через порт port_u
-    void add_directed_edge(int u_id, int v_id, int port_u) {
-        if (u_id >= 0 && u_id < (int)nodes.size()) {
+    void add_directed_edge(int u_id, int v_id, size_t port_u) {
+        if (u_id >= 0 && static_cast<size_t>(u_id) < nodes.size()) {
             nodes[u_id].set_neighbor(port_u, v_id);
         }
     }
 
     // Добавление двунаправленного ребра
-    // Связывает узел u (через порт port_u) с узлом v (через порт port_v)
-    void add_edge(int u_id, int v_id, int port_u, int port_v) {
+    void add_edge(int u_id, int v_id, size_t port_u, size_t port_v) {
         add_directed_edge(u_id, v_id, port_u);
         add_directed_edge(v_id, u_id, port_v);
     }
 
     Node<T>& get_node(int id) {
-        if (id < 0 || id >= (int)nodes.size()) throw std::out_of_range("Node ID out of range");
+        if (id < 0 || static_cast<size_t>(id) >= nodes.size()) throw std::out_of_range("Node ID out of range");
         return nodes[id];
     }
     
     const Node<T>& get_node(int id) const {
-        if (id < 0 || id >= (int)nodes.size()) throw std::out_of_range("Node ID out of range");
+        if (id < 0 || static_cast<size_t>(id) >= nodes.size()) throw std::out_of_range("Node ID out of range");
         return nodes[id];
     }
 

@@ -5,60 +5,20 @@
 #include <map>
 #include "graph.hpp"
 
-// Типы сеток: квадратная, гексагональная, треугольная
 enum class GridType {
-    SQUARE,   // Квадратная (4 соседа)
-    HEXAGON,  // Гексагональная (6 соседей)
-    TRIANGLE  // Треугольная (3 соседа)
+    SQUARE,   // 4 сосед
+    HEXAGON,  // 6 соседей
+    TRIANGLE  // 3 соседа
 };
 
-// Простая структура для цвета (RGB)
 struct Color {
     int r, g, b;
-};
-
-// Данные для ячейки поля
-struct GridCellData {
-    int x, y;        // Координаты клетки на сетке
-    int bundle_id;   // ID набора (бандла), который занял эту клетку (-1 если пусто)
-    int figure_id;   // Уникальный ID фигуры на поле, -1 если пусто
-    
-    GridCellData(int x = 0, int y = 0) : x(x), y(y), bundle_id(-1), figure_id(-1) {}
-};
-
-// Поле для замощения (Grid)
-// Представляет собой граф, где узлы - это клетки сетки.
-// Наследуется от Graph<GridCellData>.
-class Grid : public Graph<GridCellData> {
-private:
-    int width, height; // Размеры сетки
-    GridType type;     // Тип сетки
-
-public:
-    // Конструктор сетки: инициализирует граф с нужным количеством портов
-    // Гексагон: 6 портов, Треугольник: 3 порта, Квадрат: 4 порта
-    Grid(int w, int h, GridType t) 
-        : Graph<GridCellData>((t == GridType::HEXAGON ? 6 : (t == GridType::TRIANGLE ? 3 : 4))),
-          width(w), height(h), type(t) {}
-
-    int get_width() const { return width; }
-    int get_height() const { return height; }
-    GridType get_type() const { return type; }
-
-    // Быстрый доступ к ID узла по координатам сетки (O(1))
-    // Возвращает ID узла или -1, если координаты выходят за границы.
-    int get_node_id_at(int x, int y) const {
-        if (x < 0 || x >= width || y < 0 || y >= height) return -1;
-        // Узлы генерируются построчно: id = y * width + x
-        return y * width + x;
-    }
 };
 
 // Данные для узла фигуры (пока пустая структура, потому что фигуры однородные)
 struct FigureNodeData {};
 
-// Фигура (Figure)
-// Представляет собой СВЯЗНЫЙ подграф сетки, который нужно разместить.
+// Фигура представляет собой СВЯЗНЫЙ подграф сетки
 class Figure : public Graph<FigureNodeData> {
 public:
     std::string name; 
@@ -66,35 +26,105 @@ public:
     Figure(std::string n, int mp) : Graph<FigureNodeData>(mp), name(n) {}
 };
 
+// Данные для ячейки поля
+struct GridCellData {
+    int x, y;        // Координаты
+    int bundle_id;   // к какой группе пренадлежит(нужно для отрисовки цвета)
+    int figure_id;   // к какой фигуре в группе пренадлежит
+    
+    GridCellData(int x = 0, int y = 0) : x(x), y(y), bundle_id(-1), figure_id(-1) {}
+};
+
+/*
+Во всех трех случаях двумерная плосткость может быть представленая в виде 
+сетки, в случаях 6 и 3 угольных ячеек -- соседи будут сдвинуты или соседство будет опредеятся не 
+стандартным плюсикм(+)
+*/
+class Grid : public Graph<GridCellData> {
+private:
+    int width, height; // Размеры
+    GridType type;     // Тип
+
+    static size_t get_max_ports_for_type(GridType t) {
+        switch (t) {
+            case GridType::HEXAGON: return 6;
+            case GridType::TRIANGLE: return 3;
+            case GridType::SQUARE: default: return 4;
+        }
+    }
+
+public:
+    Grid(int w, int h, GridType t) 
+        : Graph<GridCellData>(get_max_ports_for_type(t)),
+          width(w), height(h), type(t) {}
+
+    int get_width() const { return width; }
+    int get_height() const { return height; }
+    GridType get_type() const { return type; }
+
+    // Возвращает ID узла или -1, если координаты выходят за границы.
+    int get_node_id_at(int x, int y) const {
+        if (x < 0 || x >= width || y < 0 || y >= height) return -1;
+        return y * width + x;
+    }
+
+    // Проверяет возможность размещения фигуры
+    std::vector<int> get_embedding(std::shared_ptr<Figure> figure, int anchor_id, int rotation) const;
+};
+
 // Набор фигур (Bundle)
-// Группа фигур, которые должны быть размещены вместе (имеют общий ID и цвет).
 class Bundle {
 private:
-    int id;                                      // Уникальный ID бандла
-    std::vector<std::shared_ptr<Figure>> shapes; // Список фигур, входящих в этот набор
-    size_t total_area;                           // Общая площадь (количество клеток)
-    Color color;                                 // Цвет для визуализации
+    int id;                                      
+    std::vector<std::shared_ptr<Figure>> shapes; // Список фигур в наборе 
+    size_t total_area;                           // количество занимаемых клеток, сумируем по всем фигурам в наборе
+    Color color;                                
 
 public:
     Bundle() : id(-1), total_area(0), color{255, 255, 255} {} // Белый вет
 
     // Конструктор с перемещением вектора фигур (для эффективности)
-    Bundle(int id, std::vector<std::shared_ptr<Figure>> shapes, const Color& color)
-        : id(id), shapes(std::move(shapes)), color(color) {
-        recalculate_area();
-    }
+    Bundle(int id, std::vector<std::shared_ptr<Figure>> shapes, const Color& color);
 
     // Пересчитывает общую площадь бандла
-    void recalculate_area() {
-        total_area = 0;
-        for(const auto& s : shapes) {
-            total_area += s->size();
-        }
-    }
+    void recalculate_area();
 
     int get_id() const { return id; }
     const std::vector<std::shared_ptr<Figure>>& get_shapes() const { return shapes; }
     size_t get_total_area() const { return total_area; }
     const Color& get_color() const { return color; }
     void set_color(const Color& c) { color = c; }
+};
+
+// Класс Задача - объединяет поле и фигуры
+class Puzzle {
+private:
+    std::shared_ptr<Grid> grid;
+    std::shared_ptr<std::vector<Bundle>> bundles;
+    std::string name;
+
+public:
+    Puzzle() = default;
+
+    Puzzle(std::shared_ptr<Grid> g, std::shared_ptr<std::vector<Bundle>> b, std::string n = "Untitled")
+        : grid(g), bundles(b), name(n) {}
+
+    Puzzle(std::shared_ptr<Grid> g, const std::vector<Bundle>& b, std::string n = "Untitled")
+        : grid(g), bundles(std::make_shared<std::vector<Bundle>>(b)), name(n) {}
+
+    // глубокое копирование для солверов
+    Puzzle clone() const;
+    
+    // Очистить сетку (стереть ответ)
+    void clear_grid();
+
+    std::shared_ptr<Grid> get_grid() const { return grid; }
+    
+    // Возвращаем ссылку на вектор внутри shared_ptr
+    // const Puzzle дает const vector, но так как это shared_ptr, мы можем дать и не конст, если захотим.
+    // Но лучше быть строгим: бандлы обычно immutable.
+    const std::vector<Bundle>& get_bundles() const { return *bundles; }
+    
+    const std::string& get_name() const { return name; }
+    void set_name(const std::string& n) { name = n; }
 };

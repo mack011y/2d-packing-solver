@@ -8,7 +8,5 @@ int main(int argc, char* argv[]) {
     }
     
     Viewer viewer;
-    viewer.run(argv[1]);
-    
-    return 0;
+    return viewer.run(argv[1]);
 }

@@ -5,77 +5,104 @@
 #include <map>
 #include <set>
 #include <random>
+#include <chrono>
 
-// --- GRASP Solver Implementation ---
-// Greedy Randomized Adaptive Search Procedure
-// Этот метод строит решение итеративно, на каждом шаге выбирая "хорошее" место для следующей фигуры,
-// но добавляя элемент случайности (RCL - Restricted Candidate List), чтобы избегать локальных минимумов.
 
-struct SinglePlacement {
-    std::shared_ptr<Figure> figure;
-    int anchor;
-    int rotation;
-    std::vector<int> footprint;
-    int score; 
-};
-
-// Функция оценки качества размещения
-// Сейчас: бонус за соседство с уже занятыми клетками (плотность)
-static int calculate_placement_score(const std::shared_ptr<Grid>& grid, const std::vector<int>& footprint, const std::set<int>& occupied_nodes) {
+// Функция оценки качества размещения, чем больше соседей тем лучш
+int GRASPSolver::calculate_placement_score(const std::vector<int>& footprint, const std::vector<char>& occupied_mask) {
     int neighbors = 0;
+    // Проходим по всем клеткам, которые займет фигура
     for (int nid : footprint) {
-        const auto& node = grid->get_node(nid);
+        const Node<GridCellData>& node = graph->get_node(nid);
+        // Смотрим соседей этой клетки
         for(int neighbor_id : node.get_all_neighbors()) {
-            if (neighbor_id != -1 && occupied_nodes.count(neighbor_id)) {
-                neighbors += 10;
+            if (neighbor_id != -1) {
+                // Если сосед занят - это хорошо (фигуры прилипают друг к другу)
+                if (occupied_mask[neighbor_id]) {
+                    neighbors += 10;
+                }
             }
         }
     }
     return neighbors;
 }
 
-// Рекурсивная функция размещения фигур (backtracking с ограничением глубины/жадности)
-static bool place_shapes_recursive(
+// Рекурсивная функция размещения фигур (Backtracking with RCL)
+// Реализует поиск в глубину с возвратом.
+// Аргументы передаются по ссылке для избежания копирования тяжелых структур.
+bool GRASPSolver::place_shapes_recursive(
     int shape_idx, 
     const std::vector<std::shared_ptr<Figure>>& shapes, 
-    std::shared_ptr<Grid> grid, 
-    std::set<int>& current_occupied, 
+    std::vector<char>& current_occupied_mask, 
     std::vector<SinglePlacement>& out_placements,
-    std::mt19937& rng,
-    float alpha
+    std::mt19937& rng
 ) {
-    if (shape_idx >= (int)shapes.size()) return true; 
+    // если все разместили
+    if (shape_idx >= (int)shapes.size()) {
+        return true; 
+    }
 
-    const auto& shape = shapes[shape_idx];
+    const std::shared_ptr<Figure>& shape = shapes[shape_idx];
     std::vector<SinglePlacement> candidates;
     
     // 1. Поиск всех возможных мест для текущей фигуры
-    for(const auto& node : grid->get_nodes()) {
+    for(const auto& node : graph->get_nodes()) {
         int nid = node.get_id();
-        if (current_occupied.count(nid)) continue;
+        // Если клетка уже занята, пропускаем (O(1) проверка)
+        if (current_occupied_mask[nid]) {
+            continue;
+        }
 
-        for(int rot=0; rot < grid->get_max_ports(); ++rot) {
-            auto fp = get_embedding(grid, nid, shape, rot);
-            if (fp.empty()) continue;
+        // Перебираем все возможные повороты фигуры
+        for(int rot = 0; rot < graph->get_max_ports(); ++rot) {
+            // Получаем "след" фигуры (список занимаемых клеток)
+            // get_embedding возвращает пустой вектор, если фигура выходит за границы поля
+            std::vector<int> fp = graph->get_embedding(shape, nid, rot);
             
+            if (fp.empty()) {
+                continue;
+            }
+            
+            // Проверка на коллизии с уже установленными фигурами
             bool clash = false;
             for(int f_id : fp) {
-                if (current_occupied.count(f_id)) { clash = true; break; }
+                if (current_occupied_mask[f_id]) { 
+                    clash = true; 
+                    break; 
+                }
             }
+            
             if (!clash) {
-                int score = calculate_placement_score(grid, fp, current_occupied);
-                candidates.push_back({shape, nid, rot, fp, score});
+                // Ход валиден. Вычисляем его эвристическую ценность.
+                int score = calculate_placement_score(fp, current_occupied_mask);
+                SinglePlacement placement;
+                placement.figure = shape;
+                placement.anchor = nid;
+                placement.rotation = rot;
+                placement.footprint = fp;
+                placement.score = score;
+                candidates.push_back(placement);
             }
         }
     }
     
-    if (candidates.empty()) return false;
+    // Если кандидатов нет - тупик, возвращаемся назад
+    if (candidates.empty()) {
+        return false;
+    }
 
     // 2. Построение RCL (Restricted Candidate List)
+    // Это ключевой момент GRASP: мы берем не просто лучший вариант (Greedy),
+    // а список "достаточно хороших" вариантов, чтобы добавить вариативность.
     int max_score = -9999;
-    for(const auto& c : candidates) if(c.score > max_score) max_score = c.score;
+    for(const auto& c : candidates) {
+        if(c.score > max_score) {
+            max_score = c.score;
+        }
+    }
     
     std::vector<SinglePlacement> rcl;
+    float alpha = config.alpha; // Коэффициент жадности (обычно 0.8 - 0.9)
     for(const auto& c : candidates) {
         // Берем кандидатов, которые не хуже alpha * max_score
         if (c.score >= max_score * alpha || (max_score <= 0)) {
@@ -83,64 +110,89 @@ static bool place_shapes_recursive(
         }
     }
     
-    // Случайный выбор из лучших
+    // Случайный выбор из лучших кандидатов вносит стохастику, 
+    // позволяя алгоритму выходить из локальных оптимумов.
     std::shuffle(rcl.begin(), rcl.end(), rng);
-    int max_tries = std::min((int)rcl.size(), 5); // Ограничиваем ветвление
     
-    for(int i=0; i<max_tries; ++i) {
-        const auto& choice = rcl[i];
+    // Ограничиваем ветвление: проверяем не более 5 лучших вариантов.
+    // Это предотвращает комбинаторный взрыв при глубокой рекурсии.
+    int max_tries = 5;
+    if (rcl.size() < 5) {
+        max_tries = (int)rcl.size();
+    }
+    
+    for(int i = 0; i < max_tries; ++i) {
+        const SinglePlacement& choice = rcl[i];
         
-        std::set<int> new_occupied = current_occupied;
-        for(int fid : choice.footprint) new_occupied.insert(fid);
+        // "Делаем ход": Создаем новую маску занятости для следующего шага рекурсии
+        // Копирование вектора char (битовой маски) дешево по памяти.
+        std::vector<char> new_occupied_mask = current_occupied_mask;
+        for(int fid : choice.footprint) {
+            new_occupied_mask[fid] = 1;
+        }
         
         out_placements.push_back(choice);
         
-        if (place_shapes_recursive(shape_idx + 1, shapes, grid, new_occupied, out_placements, rng, alpha)) {
-            current_occupied = new_occupied;
+        // Рекурсивный спуск (Depth-First Search)
+        if (place_shapes_recursive(shape_idx + 1, shapes, new_occupied_mask, out_placements, rng)) {
+            current_occupied_mask = new_occupied_mask; // Успех! Фиксируем изменения
             return true;
         }
         
+        // Откат (Backtracking): Если ветка оказалась тупиковой, 
+        // убираем фигуру из решения и пробуем следующего кандидата из RCL.
         out_placements.pop_back();
     }
     
-    return false;
+    return false; // Ни один из вариантов не подошел
 }
 
-float GRASPSolver::run_construction_phase(SolutionState& state) {
-    // Сортировка бандлов: сначала большие и сложные
-    std::vector<int> bundle_indices(bundles.size());
-    for(size_t i=0; i<bundles.size(); ++i) bundle_indices[i] = i;
+// Фаза построения решения (Construction Phase)
+GRASPSolver::SolutionState GRASPSolver::run_construction_phase() {
+    SolutionState state;
     
-    std::sort(bundle_indices.begin(), bundle_indices.end(), [&](int a, int b){
-        if (bundles[a].get_total_area() != bundles[b].get_total_area())
+    // Сортировка наборов фигур (bundles): сначала пробуем разместить большие и сложные
+    std::vector<int> bundle_indices(bundles.size());
+    for(size_t i = 0; i < bundles.size(); ++i) {
+        bundle_indices[i] = i;
+    }
+    
+    // Лямбда-функция для сортировки
+    std::sort(bundle_indices.begin(), bundle_indices.end(), [&](int a, int b) {
+        if (bundles[a].get_total_area() != bundles[b].get_total_area()) {
             return bundles[a].get_total_area() > bundles[b].get_total_area();
+        }
         return bundles[a].get_shapes().size() > bundles[b].get_shapes().size();
     });
 
     float current_score = 0.0f;
     state.placed_bundle_ids.clear();
-    state.node_allocations.clear();
-    state.node_figure_ids.clear();
+    // Инициализация векторов (-1 означает свободно/не занято)
+    state.node_allocations.assign(graph->size(), -1);
+    state.node_figure_ids.assign(graph->size(), -1);
     
-    std::set<int> occupied_nodes;
+    // Векторная маска вместо сета
+    std::vector<char> occupied_mask(graph->size(), 0);
     static std::random_device rd;
     static std::mt19937 g(rd());
 
     int fig_uid_counter = 0;
 
+    // Проходим по всем наборам фигур
     for(int b_idx : bundle_indices) {
-        const auto& bundle = bundles[b_idx];
+        const Bundle& bundle = bundles[b_idx];
         
         std::vector<SinglePlacement> final_placements;
-        std::set<int> temp_occupied = occupied_nodes;
+        std::vector<char> temp_occupied = occupied_mask;
         
-        // Пытаемся разместить бандл целиком
-        bool success = place_shapes_recursive(0, bundle.get_shapes(), graph, temp_occupied, final_placements, g, config.grasp_alpha);
+        // Пытаемся разместить набор целиком
+        bool success = place_shapes_recursive(0, bundle.get_shapes(), temp_occupied, final_placements, g);
         
         if (success) {
+            // Если удалось, сохраняем результат
             for(const auto& p : final_placements) {
                 for(int f_id : p.footprint) {
-                    occupied_nodes.insert(f_id);
+                    occupied_mask[f_id] = 1;
                     state.node_allocations[f_id] = bundle.get_id();
                     state.node_figure_ids[f_id] = fig_uid_counter;
                 }
@@ -152,39 +204,61 @@ float GRASPSolver::run_construction_phase(SolutionState& state) {
     }
     
     state.score = current_score;
-    return current_score;
+    return state;
 }
 
-float GRASPSolver::solve() {
+SolverResult GRASPSolver::solve() {
+    auto start_time = std::chrono::high_resolution_clock::now();
+    bool use_timer = (config.max_time_seconds > 0.001);
+
+    // Сброс статистики (не используется)
+    
     float best_score = -1.0f;
     SolutionState best_state;
+    // Инициализируем пустыми значениями
+    best_state.score = -1.0f;
     
     if (config.verbose) {
-        std::cout << "GRASP: Starting " << config.grasp_max_iterations << " iterations..." << std::endl;
+        std::cout << "GRASP: Запуск оптимизации..." << std::endl;
+        if (use_timer) std::cout << "Лимит времени: " << config.max_time_seconds << " сек." << std::endl;
+        else std::cout << "Лимит итераций: " << config.max_iterations << std::endl;
     }
     
-    // Многократный запуск фазы построения
-    for(int i=0; i<config.grasp_max_iterations; ++i) {
-        SolutionState current_state;
-        float score = run_construction_phase(current_state);
+    int iter = 0;
+    while(true) {
+        if (use_timer) {
+            auto now = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed = now - start_time;
+            if (elapsed.count() > config.max_time_seconds) break;
+        } else {
+            if (iter >= config.max_iterations) break;
+        }
+
+        SolutionState current_state = run_construction_phase();
         
-        if (score > best_score) {
-            best_score = score;
+        if (current_state.score > best_score) {
+            best_score = current_state.score;
             best_state = current_state;
         }
+        iter++;
     }
     
-    // Применение лучшего результата
+    // Применение лучшего найденного результата к сетке
     placed_bundles = best_state.placed_bundle_ids;
-    for(auto const& [nid, bid] : best_state.node_allocations) {
-        if (nid >= 0 && nid < (int)graph->size()) {
-            auto& data = graph->get_node(nid).get_data();
-            data.bundle_id = bid;
-            if (best_state.node_figure_ids.count(nid)) {
-                data.figure_id = best_state.node_figure_ids.at(nid);
+    
+    // Теперь просто проходим по вектору node_allocations
+    if (!best_state.node_allocations.empty()) {
+        for(size_t nid = 0; nid < best_state.node_allocations.size(); ++nid) {
+            int bid = best_state.node_allocations[nid];
+            if (bid != -1) {
+                GridCellData& data = graph->get_node(nid).get_data();
+                data.bundle_id = bid;
+                if (best_state.node_figure_ids[nid] != -1) {
+                    data.figure_id = best_state.node_figure_ids[nid];
+                }
             }
         }
     }
     
-    return best_score;
+    return { best_score, placed_bundles };
 }

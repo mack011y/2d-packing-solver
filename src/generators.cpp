@@ -1,53 +1,28 @@
 #include "generators.h"
+#include "utils/ColorUtils.hpp"
 #include <random>
 #include <algorithm>
 #include <set>
 #include <iostream>
 #include <queue>
 #include <cmath>
+#include <unordered_map>
+#include <optional>
 
-// --- Static Helpers ---
-
-// Конвертация цвета HSV в RGB (для генерации приятных палитр)
-// h [0, 1], s [0, 1], v [0, 1]
-static void hsv_to_rgb(float h, float s, float v, int& r, int& g, int& b) {
-    int i = int(h * 6);
-    float f = h * 6 - i;
-    float p = v * (1 - s);
-    float q = v * (1 - f * s);
-    float t = v * (1 - (1 - f) * s);
-
-    float rf, gf, bf;
-    switch (i % 6) {
-        case 0: rf = v; gf = t; bf = p; break;
-        case 1: rf = q; gf = v; bf = p; break;
-        case 2: rf = p; gf = v; bf = t; break;
-        case 3: rf = p; gf = q; bf = v; break;
-        case 4: rf = t; gf = p; bf = v; break;
-        case 5: rf = v; gf = p; bf = q; break;
-        default: rf = 0; gf = 0; bf = 0; break;
-    }
-    r = int(rf * 255);
-    g = int(gf * 255);
-    b = int(bf * 255);
+PuzzleGenerator::PuzzleGenerator(const GeneratorConfig& cfg) : config(cfg) {
+    std::random_device rd;
+    rng.seed(rd());
 }
 
-// --- PuzzleGenerator Implementation ---
-
-PuzzleGenerator::PuzzleGenerator(const GeneratorConfig& cfg) : config(cfg) {}
-
-// Создание квадратной сетки (каждый узел имеет до 4 соседей)
 std::shared_ptr<Grid> PuzzleGenerator::create_square_grid() {
     auto g = std::make_shared<Grid>(config.width, config.height, GridType::SQUARE);
     
-    // 1. Создаем узлы
     for(int y=0; y<config.height; ++y) {
         for(int x=0; x<config.width; ++x) {
             g->add_node(GridCellData(x, y));
         }
     }
     
-    // 2. Создаем связи (ребра)
     for(int y=0; y<config.height; ++y) {
         for(int x=0; x<config.width; ++x) {
             int id = y*config.width + x;
@@ -60,7 +35,6 @@ std::shared_ptr<Grid> PuzzleGenerator::create_square_grid() {
     return g;
 }
 
-// Создание гексагональной сетки (соты, 6 соседей)
 std::shared_ptr<Grid> PuzzleGenerator::create_hex_grid() {
     auto g = std::make_shared<Grid>(config.width, config.height, GridType::HEXAGON);
 
@@ -70,8 +44,8 @@ std::shared_ptr<Grid> PuzzleGenerator::create_hex_grid() {
         }
     }
 
-    // Смещения для гексагональной сетки (Pointy-topped, Odd-R layout)
-    // В зависимости от четности строки (y), смещения по X меняются
+    
+    // Как уже обсуждалось ранее, соседи у шестиугольника определяются так же как и у квадрата, только со смешением, существует биекция
     int er_dx[] = {0, 1, 0, -1, -1, -1};
     int er_dy[] = {-1, 0, 1, 1, 0, -1};
     int or_dx[] = {1, 1, 1, 0, -1, 0};
@@ -98,7 +72,6 @@ std::shared_ptr<Grid> PuzzleGenerator::create_hex_grid() {
     return g;
 }
 
-// Создание треугольной сетки (3 соседа)
 std::shared_ptr<Grid> PuzzleGenerator::create_triangle_grid() {
     auto g = std::make_shared<Grid>(config.width, config.height, GridType::TRIANGLE);
     
@@ -127,22 +100,19 @@ std::shared_ptr<Grid> PuzzleGenerator::create_triangle_grid() {
     return g;
 }
 
-// Преобразование набора клеток сетки в объект Figure (подграф)
+// Преобразование набора клеток по коордам сетки в объект Figure сохраняя топологию
 std::shared_ptr<Figure> PuzzleGenerator::subset_to_figure(std::string name, const std::vector<int>& node_ids, std::shared_ptr<Grid> grid) {
     // 1. Создаем пустую фигуру
     auto fig = std::make_shared<Figure>(name, grid->get_max_ports());
     
-    // 2. Карта соответствия ID: Сетка -> Фигура
-    std::map<int, int> grid_to_fig;
+    // отображение для локального удобства (Сетка -> Фигура) понижение номеров/сжатие координат
+    std::unordered_map<int, int> grid_to_fig;
     
-    // Добавляем узлы
     for (int gid : node_ids) {
         int fid = fig->add_node(); 
         grid_to_fig[gid] = fid;
     }
     
-    // 3. Копируем топологию (ребра)
-    // Если два узла связаны в сетке и оба входят в фигуру -> связываем их в фигуре
     for (int gid : node_ids) {
         const auto& g_node = grid->get_node(gid);
         int fid = grid_to_fig[gid];
@@ -152,7 +122,7 @@ std::shared_ptr<Figure> PuzzleGenerator::subset_to_figure(std::string name, cons
             
             if (neighbor_gid != -1 && grid_to_fig.count(neighbor_gid)) {
                 int neighbor_fid = grid_to_fig[neighbor_gid];
-                fig->add_directed_edge(fid, neighbor_fid, p);
+                fig->add_directed_edge(fid, neighbor_fid, p); // мы перебираем ВСЕ ноды, поэтому можем не искать обратный порт
             }
         }
     }
@@ -160,179 +130,141 @@ std::shared_ptr<Figure> PuzzleGenerator::subset_to_figure(std::string name, cons
     return fig;
 }
 
-// Основной метод генерации задачи
-std::pair<std::vector<Bundle>, std::map<int, int>> PuzzleGenerator::generate(std::shared_ptr<Grid>& out_grid) {
-    piece_counter = 0;
+// Выращивание одной фигуры 
+std::optional<std::vector<int>> PuzzleGenerator::grow_region(int start_node, int target_size, std::shared_ptr<Grid> grid, std::vector<char>& is_free) {
+    if (!is_free[start_node]) return std::nullopt;
 
-    // 1. Создаем пустую сетку нужного типа
-    if (config.grid_type == GridType::HEXAGON) {
-        out_grid = create_hex_grid();
-    } else if (config.grid_type == GridType::TRIANGLE) {
-        out_grid = create_triangle_grid();
-    } else {
-        out_grid = create_square_grid();
-    }
-
-    std::set<int> available_nodes;
-    for(size_t i=0; i<out_grid->size(); ++i) {
-        available_nodes.insert(i);
-    }
-
-    // Временная структура для хранения формы фигуры до создания объекта Figure
-    struct TempShape {
-        std::shared_ptr<Figure> graph;
-        std::vector<int> cells;
-        int area;
-    };
-    std::vector<TempShape> shapes_data;
+    // Используем set для уникальности и vector для рандомного выбора
+    // Но так как target_size маленький (обычно < 10), можно оптимизировать
+    std::vector<int> current_shape = {start_node};
+    std::vector<int> growth = {start_node}; 
+    is_free[start_node] = 0; 
     
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    // Вспомогательный set для быстрой проверки пренадлежности тикущщей фигуре
+    std::unordered_map<int, bool> in_shape; 
+    in_shape[start_node] = true;
 
-    // 2. Выращивание фигур (Partitioning)
-    // Мы делим сетку на части, выращивая регионы из случайных точек
-    while(!available_nodes.empty()) {
-        std::vector<int> av_vec(available_nodes.begin(), available_nodes.end());
-        std::uniform_int_distribution<> dis(0, av_vec.size()-1);
-        int start = av_vec[dis(gen)];
+    while((int)current_shape.size() < target_size && !growth.empty()) {
+        int grow_from;
+        if (std::uniform_real_distribution<>(0, 1)(rng) < 0.6) { // в приоритете сложность, а значит делаем змею, вероятнее идем из самой свежей вершины
+            grow_from = growth.back();
+        } else {
+            std::uniform_int_distribution<> g_dist(0, growth.size()-1);
+            grow_from = growth[g_dist(rng)];
+        }
 
-        std::set<int> current_shape = {start};
-        std::vector<int> growth = {start}; // "Фронт" роста
+        // Ищем свободных соседей
+        std::vector<int> valid_neighbors;
+        for(int p=0; p < grid->get_max_ports(); ++p) {
+            int n = grid->get_node(grow_from).get_neighbor(p);
+
+            if (n != -1 && is_free[n] && !in_shape.count(n)) {
+                valid_neighbors.push_back(n);
+            }
+        }
+
+        if(valid_neighbors.empty()) {
+            // ТПоскольку мы не нашли соседей, значит из этой вершины перейти в следующую уже нельзя, можно удалить
+            if (std::find(growth.begin(), growth.end(), grow_from) != growth.end()) {
+                    auto it = std::find(growth.begin(), growth.end(), grow_from);
+                    if (it != growth.end()) growth.erase(it);
+            }
+            continue;
+        }
+
+        // Выбираем случайного соседа и добавляем в фигуру
+        std::uniform_int_distribution<> n_dist(0, valid_neighbors.size()-1);
+        int next = valid_neighbors[n_dist(rng)];
         
-        std::uniform_int_distribution<> size_dist(config.min_shape_size, config.max_shape_size);
-        int target_size = size_dist(gen);
-
-        while(current_shape.size() < target_size && !growth.empty()) {
-            // HARDCORE MODE: Random Walk (Змейка)
-            // С вероятностью 85% продолжаем рост из "хвоста" (последней добавленной клетки),
-            // чтобы получить длинные извилистые фигуры. Иначе - ветвимся.
-            int grow_from;
-            if (std::uniform_real_distribution<>(0, 1)(gen) < 0.85) {
-                grow_from = growth.back();
-            } else {
-                std::uniform_int_distribution<> g_dist(0, growth.size()-1);
-                grow_from = growth[g_dist(gen)];
-            }
-
-            // Ищем свободных соседей
-            std::vector<int> valid_neighbors;
-            for(int p=0; p < out_grid->get_max_ports(); ++p) {
-                int n = out_grid->get_node(grow_from).get_neighbor(p);
-                // Сосед валиден, если он существует, свободен и еще не в текущей фигуре
-                if (n != -1 && available_nodes.count(n) && current_shape.find(n) == current_shape.end()) {
-                    valid_neighbors.push_back(n);
-                }
-            }
-
-            if(valid_neighbors.empty()) {
-                // Тупик. Удаляем эту точку из фронта роста
-                if (std::find(growth.begin(), growth.end(), grow_from) != growth.end()) {
-                     auto it = std::find(growth.begin(), growth.end(), grow_from);
-                     if (it != growth.end()) growth.erase(it);
-                }
-                continue;
-            }
-
-            // Выбираем случайного соседа и добавляем в фигуру
-            std::uniform_int_distribution<> n_dist(0, valid_neighbors.size()-1);
-            int next = valid_neighbors[n_dist(gen)];
-            current_shape.insert(next);
-            growth.push_back(next);
-        }
-
-        // Помечаем клетки как занятые
-        for(int id : current_shape) available_nodes.erase(id);
-
-        std::vector<int> cell_list(current_shape.begin(), current_shape.end());
-        shapes_data.push_back({nullptr, cell_list, (int)current_shape.size()});
+        current_shape.push_back(next);
+        in_shape[next] = true;
+        growth.push_back(next);
+        is_free[next] = 0; 
     }
+    
+    return current_shape;
+}
 
-    // 2.5 Слияние мелких остатков (Merge)
-    // Если остались "осколки" меньше минимального размера, приклеиваем их к соседям.
-    auto rebuild_lookup = [&](std::vector<int>& lookup) {
-        lookup.assign(out_grid->size(), -1);
-        for(size_t i=0; i<shapes_data.size(); ++i) {
-            for(int cid : shapes_data[i].cells) {
-                lookup[cid] = i;
-            }
+// 2. Слияние мелких остатков с соседями (Упрощенная версия: Поглощение)
+std::vector<PuzzleGenerator::TempShape> PuzzleGenerator::merge_small_shapes(const std::vector<TempShape>& input_shapes, std::shared_ptr<Grid> grid) {
+    std::vector<TempShape> shapes = input_shapes;
+    
+    // Карта: ID клетки -> Индекс фигуры в векторе shapes
+    std::vector<int> cell_to_shape_idx(grid->size(), -1);
+    
+    // Инициализация карты
+    for(size_t i=0; i<shapes.size(); ++i) {
+        for(int cid : shapes[i].cells) {
+            cell_to_shape_idx[cid] = (int)i;
         }
-    };
+    }
     
-    std::vector<int> cell_to_shape_idx(out_grid->size(), -1);
-    rebuild_lookup(cell_to_shape_idx);
-    
-    bool merged = true;
-    while(merged) {
-        merged = false;
-        for(size_t i=0; i<shapes_data.size(); ++i) {
-            if (shapes_data[i].cells.empty()) continue; 
-            
-            if (shapes_data[i].area < config.min_shape_size) {
-                // Ищем соседнюю фигуру
-                std::set<int> neighbor_shapes;
-                for(int cid : shapes_data[i].cells) {
-                    const auto& node = out_grid->get_node(cid);
-                    for(int neighbor_cid : node.get_all_neighbors()) {
-                        if (neighbor_cid != -1) {
-                            int neighbor_shape_idx = cell_to_shape_idx[neighbor_cid];
-                            if (neighbor_shape_idx != -1 && neighbor_shape_idx != (int)i) {
-                                neighbor_shapes.insert(neighbor_shape_idx);
-                            }
-                        }
+    // Проходим по всем фигурам
+    for(size_t i=0; i<shapes.size(); ++i) {
+        // Если фигура уже удалена (пустая) или достаточно большая - пропускаем
+        if (shapes[i].cells.empty() || shapes[i].area >= config.min_shape_size) {
+            continue;
+        }
+        
+        // Фигура маленькая - нужно слить с соседом
+        // Ищем соседей
+        std::vector<int> neighbor_indices;
+        
+        for(int cid : shapes[i].cells) {
+            const auto& node = grid->get_node(cid);
+            for(int n_cid : node.get_all_neighbors()) {
+                if (n_cid != -1) {
+                    int n_idx = cell_to_shape_idx[n_cid];
+                    // Если сосед существует, не является нами самими и не удален
+                    if (n_idx != -1 && n_idx != (int)i && !shapes[n_idx].cells.empty()) {
+                        neighbor_indices.push_back(n_idx);
                     }
                 }
-                
-                if (!neighbor_shapes.empty()) {
-                    // Сливаем с случайным соседом
-                    std::vector<int> neighbors_vec(neighbor_shapes.begin(), neighbor_shapes.end());
-                    std::uniform_int_distribution<> ndist(0, neighbors_vec.size()-1);
-                    int target_idx = neighbors_vec[ndist(gen)];
-                    
-                    auto& target = shapes_data[target_idx];
-                    auto& src = shapes_data[i];
-                    
-                    target.cells.insert(target.cells.end(), src.cells.begin(), src.cells.end());
-                    target.area += src.area;
-                    
-                    for(int cid : src.cells) cell_to_shape_idx[cid] = target_idx;
-                    
-                    src.cells.clear();
-                    src.area = 0;
-                    merged = true;
-                }
             }
         }
         
-        // Чистим пустые фигуры
-        if (merged) {
-            std::vector<TempShape> new_shapes;
-            for(const auto& s : shapes_data) {
-                if (!s.cells.empty()) new_shapes.push_back(s);
+        // Удаляем дубликаты соседей
+        std::sort(neighbor_indices.begin(), neighbor_indices.end());
+        neighbor_indices.erase(std::unique(neighbor_indices.begin(), neighbor_indices.end()), neighbor_indices.end());
+        
+        if (!neighbor_indices.empty()) {
+            // Выбираем случайного соседа для слияния
+            std::uniform_int_distribution<> dist(0, neighbor_indices.size() - 1);
+            int target_idx = neighbor_indices[dist(rng)];
+            
+            // Сливаем i -> target_idx
+            auto& src = shapes[i];
+            auto& dst = shapes[target_idx];
+            
+            // Переносим клетки
+            for(int cid : src.cells) {
+                dst.cells.push_back(cid);
+                cell_to_shape_idx[cid] = target_idx; // Обновляем карту
             }
-            shapes_data = new_shapes;
-            rebuild_lookup(cell_to_shape_idx);
+            dst.area += src.area;
+            
+            // Очищаем источник
+            src.cells.clear();
+            src.area = 0;
         }
     }
     
-    // Создаем финальные объекты Figure
-    for(auto& shape : shapes_data) {
-        auto fig = subset_to_figure("S_" + std::to_string(piece_counter), shape.cells, out_grid);
-        shape.graph = fig;
-        
-        // Записываем ID фигуры в сетку (для валидации решения)
-        for(int cid : shape.cells) {
-            out_grid->get_node(cid).get_data().figure_id = piece_counter;
+    // Собираем только выжившие фигуры
+    std::vector<TempShape> final_shapes;
+    for(const auto& s : shapes) {
+        if (!s.cells.empty()) {
+            final_shapes.push_back(s);
         }
-        piece_counter++;
     }
+    
+    return final_shapes;
+}
 
-    // 3. Группировка фигур в Бандлы (Bundles)
-    // Случайным образом объединяем фигуры в группы до достижения целевой площади.
-    std::shuffle(shapes_data.begin(), shapes_data.end(), gen);
+// 3. Формирование бандлов и раскраска
+std::vector<Bundle> PuzzleGenerator::create_bundles(std::vector<TempShape>& shapes, std::shared_ptr<Grid> grid) {
+    std::shuffle(shapes.begin(), shapes.end(), rng);
     
     std::vector<Bundle> bundles;
-    std::map<int, int> solution_map;
-    
     size_t idx = 0;
     int bundle_counter = 0;
     
@@ -341,13 +273,13 @@ std::pair<std::vector<Bundle>, std::map<int, int>> PuzzleGenerator::generate(std
         config.max_bundle_area
     );
 
-    while(idx < shapes_data.size()) {
-        int target_area = area_dist(gen);
+    while(idx < shapes.size()) {
+        int target_area = area_dist(rng);
         int current_bundle_area = 0;
         std::vector<std::shared_ptr<Figure>> group_shapes;
         
-        while(idx < shapes_data.size()) {
-             auto& item = shapes_data[idx];
+        while(idx < shapes.size()) {
+             auto& item = shapes[idx];
              
              if (current_bundle_area > 0 && current_bundle_area >= target_area) {
                  break; 
@@ -356,8 +288,9 @@ std::pair<std::vector<Bundle>, std::map<int, int>> PuzzleGenerator::generate(std
              group_shapes.push_back(item.graph);
              current_bundle_area += item.area;
              
+             // Заполняем ID бандла в сетке
              for(int nid : item.cells) {
-                 solution_map[nid] = bundle_counter;
+                 grid->get_node(nid).get_data().bundle_id = bundle_counter;
              }
              
              idx++;
@@ -365,17 +298,11 @@ std::pair<std::vector<Bundle>, std::map<int, int>> PuzzleGenerator::generate(std
 
         if (group_shapes.empty()) break; 
 
-        int bid = bundle_counter;
-        
-        // Генерация цвета (пока просто placeholder, ниже будет перекрашено)
-        Bundle new_bundle(bid, group_shapes, {255, 255, 255});
-        bundles.push_back(new_bundle);
-
+        bundles.emplace_back(bundle_counter, group_shapes, Color{255, 255, 255});
         bundle_counter++;
     }
     
-    // 4. Пост-обработка цветов (Rainbow Heatmap)
-    // Раскрашиваем бандлы от синего (маленькие) к красному (большие)
+    // Раскраска (Heatmap based on area)
     size_t min_area = 1e9, max_area = 0;
     for(const auto& b : bundles) {
         size_t area = b.get_total_area();
@@ -388,14 +315,76 @@ std::pair<std::vector<Bundle>, std::map<int, int>> PuzzleGenerator::generate(std
         if (max_area > min_area) {
             t = (float)(bundle.get_total_area() - min_area) / (float)(max_area - min_area);
         }
-        
-        float h = (1.0f - t) * (240.0f / 360.0f); // 240=Blue, 0=Red
-        
-        int r, g, b;
-        hsv_to_rgb(h, 0.85f, 0.95f, r, g, b);
-        
-        bundle.set_color({r, g, b});
+        bundle.set_color(ColorUtils::get_heatmap_color(t));
     }
     
-    return {bundles, solution_map};
+    return bundles;
+}
+
+// Основной метод генерации задачи
+Puzzle PuzzleGenerator::generate() {
+    piece_counter = 0;
+    std::shared_ptr<Grid> out_grid;
+
+    // 1. Создаем пустую сетку нужного типа
+    if (config.grid_type == GridType::HEXAGON) {
+        out_grid = create_hex_grid();
+    } else if (config.grid_type == GridType::TRIANGLE) {
+        out_grid = create_triangle_grid();
+    } else {
+        out_grid = create_square_grid();
+    }
+
+    // Оптимизация: Используем вектор для пула свободных узлов (для рандома)
+    std::vector<int> available_nodes_pool;
+    available_nodes_pool.reserve(out_grid->size());
+    std::vector<char> node_is_free(out_grid->size(), 1); // 1 = свободно, 0 = занято
+
+    for(size_t i=0; i<out_grid->size(); ++i) {
+        available_nodes_pool.push_back(i);
+    }
+
+    std::vector<TempShape> shapes_data;
+    
+    // 2. Выращивание фигур (Partitioning)
+    std::uniform_int_distribution<> size_dist(config.min_shape_size, config.max_shape_size);
+
+    while(!available_nodes_pool.empty()) {
+        // Быстрый выбор случайного:
+        std::uniform_int_distribution<> dis(0, available_nodes_pool.size()-1);
+        int rand_idx = dis(rng);
+        int start = available_nodes_pool[rand_idx];
+        
+        // Swap-and-pop
+        available_nodes_pool[rand_idx] = available_nodes_pool.back();
+        available_nodes_pool.pop_back();
+
+        // Попытка вырастить фигуру
+        int target_size = size_dist(rng);
+        
+        if (auto new_cells = grow_region(start, target_size, out_grid, node_is_free)) {
+            shapes_data.push_back({nullptr, *new_cells, (int)new_cells->size()});
+        }
+    }
+
+    // 2.5 Слияние мелких остатков (Merge)
+    // ТЕПЕРЬ ФУНКЦИЯ ВОЗВРАЩАЕТ НОВЫЙ СПИСОК ФИГУР
+    shapes_data = merge_small_shapes(shapes_data, out_grid);
+    
+    // Создаем финальные объекты Figure (Graph objects)
+    for(auto& shape : shapes_data) {
+        auto fig = subset_to_figure("S_" + std::to_string(piece_counter), shape.cells, out_grid);
+        shape.graph = fig;
+        
+        // Записываем ID фигуры в сетку (для валидации решения)
+        for(int cid : shape.cells) {
+            out_grid->get_node(cid).get_data().figure_id = piece_counter;
+        }
+        piece_counter++;
+    }
+
+    // 3. Группировка фигур в Бандлы (Bundles)
+    std::vector<Bundle> bundles = create_bundles(shapes_data, out_grid);
+    
+    return Puzzle(out_grid, bundles, "Generated");
 }
